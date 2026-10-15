@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steam Six</title>
+<meta name="description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
+<meta property="og:title" content="Steam Six - the six pack you need">
+<meta property="og:description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://steamsix.pages.dev/">
+<meta property="og:image" content="https://steamsix.pages.dev/card.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Steam Six">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Steam Six - the six pack you need">
+<meta name="twitter:description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
+<meta name="twitter:image" content="https://steamsix.pages.dev/card.jpg">
+<meta name="theme-color" content="#0a0c0e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%230e1013' stroke='%23565d66' stroke-width='2'/><path d='M3 16a13 13 0 0 1 26 0z' fill='%234f9bd9'/><path d='M3 16a13 13 0 0 0 26 0z' fill='%237a4a1e'/><rect x='15' y='4' width='2' height='24' fill='%23e8ebef'/></svg>">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0a0c0e; color: #cfd4da;
+    font-family: Calibri, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    display: flex; flex-direction: column; min-height: 100vh;
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  }
+  /* columns pinned to the bezel width: max-content let wide caption fonts
+     (iPhone Helvetica fallback) push the grid sideways; captions wrap instead */
+  main.panel { display: grid; grid-template-columns: repeat(3, 316px); gap: 20px 26px; padding: 22px; justify-content: center; flex: 1; align-content: center; }
+  .gauge { text-align: center; position: relative; width: 316px; }
+  /* cell-corner knobs (round 4): live in the square corner beside the circular
+     bezel — clear of dial art and captions; HTML elements because the canvas
+     is border-radius:50% and would clip canvas-drawn corners */
+  .knob {
+    position: absolute; width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 34% 28%, #4d545d 0%, #23272d 55%, #101317 100%);
+    border: 2px solid #565d66; box-shadow: 0 2px 6px rgba(0,0,0,.5), inset 0 1px 1px rgba(255,255,255,.12);
+    cursor: grab; touch-action: none; z-index: 2;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .knob:active { cursor: grabbing; border-color: #8d97a1; }
+  .knob i { display: block; width: 3px; height: 10px; margin: 2px auto 0; background: #e8ebef; border-radius: 2px; }
+  .knob b { position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    font: 700 9px/1.4 Calibri, "Segoe UI", Arial, sans-serif; color: #8d97a1; letter-spacing: .08em; }
+  .bezel {
+    width: 316px; height: 316px; border-radius: 50%; padding: 8px;
+    background: radial-gradient(circle at 32% 26%, #565d66 0%, #2b3037 34%, #14171b 72%, #0c0e11 100%);
+    box-shadow: 0 6px 18px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.14), inset 0 -2px 5px rgba(0,0,0,.6);
+  }
+  canvas { display: block; border-radius: 50%; box-shadow: inset 0 0 14px rgba(0,0,0,.9); }
+  .cap { margin-top: 7px; font-size: 11.5px; line-height: 1.5; letter-spacing: .14em; color: #8d97a1; }
+  .cap b { color: #dbe0e6; font-weight: 600; }
+  .cap .flag { color: #ff5b4a; font-weight: 700; letter-spacing: .1em; margin-left: 8px; }
+  #gpsmsg { display: none; padding: 8px 16px; font-size: 13px; color: #ffc25e;
+    background: #241a08; border-bottom: 1px solid #4a3610; }
+  #gpsmsg.show { display: block; }
+  footer { padding: 6px 16px 12px; text-align: center; font: 11px/1.7 ui-monospace, Menlo, Consolas, monospace; color: #6b747d; }
+  #err { color: #ff5b4a; font-family: monospace; padding: 0 16px; white-space: pre-wrap; }
+  #sensorpill {
+    position: fixed; top: 10px; right: 12px; z-index: 5;
+    background: #171b20; color: #dfe4ea; border: 1px solid #2a3138; border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; letter-spacing: .06em; cursor: pointer;
+    -webkit-touch-callout: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="gpsmsg"></div>
+<main class="panel" id="panel"></main>
+<div id="err"></div>
+<footer id="raw">waiting for GPS…</footer>
+<script>
+"use strict";
+window.onerror = (m, s, l) => { document.getElementById('err').textContent += `ERR ${m} @${l}\n`; };
+
+/* ================= CONFIG ================= */
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+const S = 300;                       // css diameter of each instrument
+const INK = '#f2f4f6', DIMI = '#b9c0c8', FACE = '#0e1013', EDGE = '#23272c';
+const AMBER = '#ff9f1a', RED = '#e23b2e', SKY1 = '#2f7ec2', SKY2 = '#4f9bd9',
+      GND1 = '#7a4a1e', GND2 = '#543013';
+const FONT = (px, w) => `${w || 600} ${px}px Calibri, "Segoe UI", Arial, sans-serif`;
+
+/* ================= LIVE DRIVER =================
+   navigator.geolocation.watchPosition (enableHighAccuracy) is the ONLY driver,
+   started at page load and re-armed after every failure (signal loss or
+   denied permission). speed m/s → kt · heading → HDG/track (held when stale,
+   flagged only if never seen) · altitude m → ft · the regression-derived
+   values (VSI, turn rate, bank, pitch) are least-squares slopes over the
+   rolling buffers with short exponential forgetting (2.5 s heading,
+   4.5 s altitude): the averaging dithers out GPS noise, but motion that
+   ended leaves the estimate in ~2-3 time constants instead of ringing
+   through the whole 12 s window. VSI is accuracy-weighted, gated
+   to 0 below ~5 kt or on a stale fix (a parked car has no vertical speed),
+   capped at a 25% grade x groundspeed, and reset when one fix steps past
+   the re-baseline gate. Pre-fix the gauges rest at zeros. */
+const GP = { watch: null, retry: null, started: false, fix: false, everFix: false, last: null, ts: null, lastFixT: null, samples: [], hSamples: [], hPrev: null, hCum: 0, attT: null, pitchDisp: 0, bankDisp: 0, vsiDisp: 0, crsOrigin: null, devDisp: 0, devT: null, iasT: null, iasDisp: 0, altT: null, altDisp: 0, trT: null, trDisp: 0, vsiT: null, tgt: null, obs: false, legOrigin: null, tgtBrg: null, tgtDist: null, lastHdg: null, lastAlt: null };
+const MS2KT = 1.94384, M2FT = 3.28084;
+const gpsmsg = document.getElementById('gpsmsg');
+function gpsBanner(msg) { gpsmsg.textContent = msg; gpsmsg.classList.toggle('show', !!msg); }
+function startGPS() {
+  if (!('geolocation' in navigator)) { gpsBanner('This browser has no location support.'); return; }
+  GP.started = true;
+  if (!GP.fix) gpsBanner('Waiting for a GPS fix…');
+  startWatch();
+}
+function onFix(pos) {
+  FLAGS.gpsLost = false; GP.last = pos.coords; GP.fix = true; GP.ts = pos.timestamp;
+  const now = performance.now();
+  GP.lastFixT = now;
+  if (!GP.crsOrigin) anchorCourse();             // first fix anchors the default course line
+  /* no ?tgt= deep link: the first fix becomes the waypoint, so the HSI
+     always points back to where the session started ("home") */
+  if (GP.tgt == null && pos.coords.latitude != null && pos.coords.longitude != null)
+    GP.tgt = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+  if (pos.coords.altitude != null) {
+    const ft = pos.coords.altitude * M2FT;
+    /* sigma feeds the regression weights; missing altitudeAccuracy gets a
+       neutral 45 ft (typical phone GPS vertical accuracy) */
+    const sig = pos.coords.altitudeAccuracy == null ? 45
+      : Math.max(10, Math.min(100, pos.coords.altitudeAccuracy * M2FT));
+    /* re-baseline gate: when the GPS constellation shifts, altitude can step
+       50-100 ft in one fix. A step past 4 sigma cannot be real motion at car
+       speeds, so the window restarts instead of regressing through it (the
+       physics cap bounds anything that slips through) */
+    const f = linFit(GP.samples, 4500);
+    if (f != null && Math.abs(ft - (f.yx + f.b * (now - f.tx))) > 4 * sig) GP.samples.length = 0;
+    GP.samples.push({ t: now, y: ft, s: sig });
+    while (GP.samples.length && now - GP.samples[0].t > 12000) GP.samples.shift();
+  }
+  if (pos.coords.heading != null) {             // unwrapped so the 359->0 wrap can't fake a spin
+    if (GP.hPrev != null) {
+      let dh = pos.coords.heading - GP.hPrev;
+      if (dh > 180) dh -= 360; else if (dh < -180) dh += 360;
+      GP.hCum += dh;
+    }
+    GP.hPrev = pos.coords.heading;
+    GP.hSamples.push({ t: now, y: GP.hCum });
+    while (GP.hSamples.length && now - GP.hSamples[0].t > 12000) GP.hSamples.shift();
+  }
+  GP.everFix = true;
+  gpsBanner('');
+}
+function onErr(e) {
+  GP.fix = false;
+  FLAGS.gpsLost = GP.everFix && e.code !== 1;   // had a fix, then lost it ⇒ X overlay
+  const denied = e.code === 1;
+  gpsBanner(denied
+    ? 'Location is blocked for this site. Allow it in the address bar (tap the ⓘ / lock icon → Location → Allow). The page retries automatically.'
+    : GP.everFix ? 'GPS signal lost — searching…' : 'No GPS fix yet (underground, tunnel?) — searching…');
+  /* every failure re-arms the watch: a car leaving a tunnel must recover
+     without a reload (a dead watch never re-fires on its own), and a
+     permission flip in the address bar revives a denied page */
+  if (GP.watch !== null) { navigator.geolocation.clearWatch(GP.watch); GP.watch = null; }
+  clearTimeout(GP.retry);
+  GP.retry = setTimeout(() => { if (GP.started && GP.watch === null) startWatch(); }, denied ? 5000 : 2000);
+}
+/* ================= DEVICE ORIENTATION (phones) =================
+   Vehicle browsers expose no orientation sensors; phones do. When deviceorientation
+   events deliver real values, attitude comes from the gravity vector built
+   from beta/gamma in vector form (immune to the beta=+/-90 gimbal
+   singularity of reading the angles directly), mapped onto car axes. The
+   mount is inferred from gravity itself: whichever chassis edge points
+   skyward is up, so portrait, landscape, and upside-down mounts all work
+   without consulting the Screen Orientation API. A phone lying flat has no
+   dominant vertical edge, declines to guess, and the GPS approximation stays
+   in charge. Magnetic heading (webkitCompassHeading on iOS, absolute alpha on
+   Android) covers the one thing GPS can't: heading at standstill. iOS gates
+   the sensors behind a one-tap permission gesture (the pill below). */
+const SENS = { seen: false, t: 0, beta: 0, gamma: 0, mag: null, magT: 0 };
+/* MOUNT CALIBRATION: a mount tilts the phone a degree or two off the car's
+   level. SET LEVEL captures the current gravity vector as straight-and-level
+   (persisted in localStorage; long-press the button to clear). There is
+   deliberately no automatic wash to the long-term gravity mean: crowned
+   roads, hills, and parking slopes all bias it, and a horizon that silently
+   drifts mid-drive is worse than a fixed mount offset. */
+/* 'sixpack.cal' predates the Steam Six rename; keeping the key means a saved
+   calibration survives (renaming the key would discard it). */
+let CAL = null;
+try { CAL = JSON.parse(localStorage.getItem('sixpack.cal')) } catch (e) {}
+function sensorFrame() {
+  const cb = Math.cos(SENS.beta * D2R), sb = Math.sin(SENS.beta * D2R),
+        cg = Math.cos(SENS.gamma * D2R), sg = Math.sin(SENS.gamma * D2R);
+  const g = [cb * sg, -sb, -cb * cg];                   // gravity, unit vector in chassis coords
+  if (Math.max(Math.abs(g[0]), Math.abs(g[1])) < .5) return null;   // flat: no mount to read
+  let u, r;
+  if (Math.abs(g[1]) >= Math.abs(g[0])) { u = [0, -Math.sign(g[1]), 0]; r = [-Math.sign(g[1]), 0, 0]; }
+  else { u = [-Math.sign(g[0]), 0, 0]; r = [0, Math.sign(g[0]), 0]; }
+  return { g, u, r };                    // f (forward) is derived in sensorAttitude: u x r
+}
+function sensorAttitude() {
+  const fr = sensorFrame();
+  if (!fr) return null;
+  let { g, u, r } = fr;
+  const d = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+  if (CAL && CAL.g0) {                                  // rebase level onto the calibrated gravity
+    const n = v => { const l = Math.hypot(v[0], v[1], v[2]); return l < .1 ? null : [v[0]/l, v[1]/l, v[2]/l]; };
+    const up = n([-CAL.g0[0], -CAL.g0[1], -CAL.g0[2]]);
+    const dr = up && d(CAL.r, up);
+    const rr = up && n([CAL.r[0] - dr*up[0], CAL.r[1] - dr*up[1], CAL.r[2] - dr*up[2]]);
+    if (up && rr) { u = up; r = rr; }                   // f is rebuilt below: it must follow the calibrated frame
+  }
+  /* forward = u x r completes a right-handed frame; with the axis-aligned
+     uncalibrated mount this is exactly [0,0,-1] (screen faces the driver),
+     but after calibration the tilted level rotates it too */
+  const f = [u[1]*r[2] - u[2]*r[1], u[2]*r[0] - u[0]*r[2], u[0]*r[1] - u[1]*r[0]];
+  return {
+    pitch: Math.max(-30, Math.min(30, Math.atan2(-d(g, f), -d(g, u)) / D2R)),
+    roll:  Math.max(-45, Math.min(45, Math.atan2(d(g, r), -d(g, u)) / D2R))
+  };
+}
+function onOrient(ev) {
+  if (ev.beta == null || ev.gamma == null) return;
+  SENS.seen = true; SENS.t = performance.now();
+  SENS.beta = ev.beta; SENS.gamma = ev.gamma;
+  let mh = null;
+  if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) mh = ev.webkitCompassHeading;
+  else if (ev.absolute && ev.alpha != null) mh = (360 - ev.alpha) % 360;
+  if (mh != null) { SENS.mag = mh; SENS.magT = SENS.t; }
+}
+addEventListener('deviceorientation', onOrient);
+addEventListener('deviceorientationabsolute', onOrient);
+function sensNow() {
+  const now = performance.now();
+  if (!SENS.seen || now - SENS.t > 2000) return null;    // stale when backgrounded
+  return { att: sensorAttitude(),
+           mag: SENS.mag != null && now - SENS.magT < 2000 ? SENS.mag : null };
+}
+/* The pill shows only where requestPermission exists (iOS; not on vehicle
+   browsers) and only until sensor data actually flows */
+if (typeof DeviceOrientationEvent !== 'undefined' &&
+    typeof DeviceOrientationEvent.requestPermission === 'function') {
+  const pill = document.createElement('button');
+  pill.id = 'sensorpill'; pill.textContent = 'ENABLE MOTION';
+  pill.onclick = () => DeviceOrientationEvent.requestPermission().then(() => pill.remove(), () => pill.remove());
+  document.body.appendChild(pill);
+  addEventListener('deviceorientation', () => pill.remove(), { once: true });
+}
+
+/* ================= KNOB STATE =================
+   Interactive knobs: course/bug drag-rotate on the HSI, baro knob on the
+   altimeter. Baro mechanic (research: private/research/alt.md): indicated =
+   true + (baro−29.92)·1000 ft, applied LIVE — ≈10 ft per 0.01 inHg, 1,000 ft
+   per inHg, exactly the knob-pointer coupling of a real sensitive altimeter
+   (IFH ch. 3). GPS altitude is true altitude, so dialing in a baro setting
+   shows pressure-referenced indicated altitude, as the real instrument
+   would. */
+const KNOBS = { course: 90, bug: 135, baro: 29.92 };
+
+function state() {
+  const sn = sensNow();
+  if (GP.fix) return gpsState(sn);
+  /* pre-fix rest: honest zeros; phone sensors, if present, still fly the AI */
+  const hdg = sn && sn.mag != null ? sn.mag : (GP.lastHdg || 0);
+  return { ias: 0, pitch: sn && sn.att ? sn.att.pitch : GP.pitchDisp,
+    bank: sn && sn.att ? sn.att.roll : GP.bankDisp, vsi: 0, turnRate: 0,
+    alt: (GP.lastAlt || 0) + (KNOBS.baro - 29.92) * 1000, baro: KNOBS.baro, hdg,
+    course: KNOBS.course, bug: KNOBS.bug, dev: GP.devDisp, tofrom: 0, xtk: null, xtkOff: false,
+    tgt: !!GP.tgt, obs: GP.obs, tgtBrg: null, tgtDist: null,
+    flags: { gpsLost: FLAGS.gpsLost,
+      attDead: FLAGS.gpsLost && (sn == null || sn.att == null),   // GPS lost AND no phone attitude
+      headingInvalid: (sn == null || sn.mag == null) && GP.lastHdg == null } };
+}
+
+/* ================= DRAW HELPERS ================= */
+function face(ctx) {                          // black face + rim
+  ctx.fillStyle = FACE; ctx.beginPath(); ctx.arc(150, 150, 142, 0, TAU); ctx.fill();
+  ctx.strokeStyle = EDGE; ctx.lineWidth = 3; ctx.stroke();
+}
+function arcAz(ctx, r, a0, a1, col, w) {      // arc between azimuths (0°=up cw)
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+  ctx.arc(150, 150, r, (a0 - 90) * D2R, (a1 - 90) * D2R); ctx.stroke();
+}
+function xy(az, r) {                          // azimuth: 0° = up, clockwise
+  return [150 + Math.sin(az * D2R) * r, 150 - Math.cos(az * D2R) * r];
+}
+function tick(ctx, az, r0, r1, w, col) {
+  const [x0, y0] = xy(az, r0), [x1, y1] = xy(az, r1);
+  ctx.strokeStyle = col || INK; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+}
+function label(ctx, az, r, txt, px, col, w) {
+  const [x, y] = xy(az, r);
+  ctx.fillStyle = col || INK; ctx.font = FONT(px, w || 700);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, x, y);
+}
+function needle(ctx, az, len, w, col, tail) { // needle from hub at center
+  const [x, y] = xy(az, len), [tx, ty] = xy(az + 180, tail || 26);
+  ctx.strokeStyle = col || INK; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke(); ctx.lineCap = 'butt';
+}
+function hub(ctx, r) {
+  ctx.fillStyle = '#16191d'; ctx.beginPath(); ctx.arc(150, 150, r, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#3a4048'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#454c55'; ctx.beginPath(); ctx.arc(150 - r*.3, 150 - r*.3, r*.28, 0, TAU); ctx.fill();
+}
+function flagOverlay(ctx, tag) {              // degenerate state: gray veil + red X + tag
+  ctx.fillStyle = 'rgba(120,126,134,.45)'; ctx.beginPath(); ctx.arc(150, 150, 142, 0, TAU); ctx.fill();
+  ctx.strokeStyle = RED; ctx.lineWidth = 9; ctx.lineCap = 'round'; ctx.globalAlpha = .9;
+  ctx.beginPath(); ctx.moveTo(70, 70); ctx.lineTo(230, 230); ctx.moveTo(230, 70); ctx.lineTo(70, 230); ctx.stroke();
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  ctx.fillStyle = RED; const w = 8 + tag.length * 7.6;
+  roundRect(ctx, 150 - w/2, 214, w, 24, 5); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = FONT(13, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(tag, 150, 226.5);
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+/* ================= GAUGE 1 — AIRSPEED =================
+   Full scale 140 kt (research: private/research/asi.md). Sweep pow 1.2 —
+   real dials spread high speeds wider (dynamic pressure ~ V^2). Green normal
+   25–95 and yellow caution 95–140 sit in one band just outside the tick ring,
+   yellow running INTO the red Vne radial. The white flap arc (20–60) rides
+   OUTBOARD of the band at its own radius so it stays fully visible even
+   where it overlaps the green angularly. */
+const VMAX = 140;
+const aSpd = v => -100 + 320 * Math.pow(v / VMAX, 1.2);      // 0 kt left of top → 140 kt
+function drawASI(ctx, s) {
+  face(ctx);
+  arcAz(ctx, 120, aSpd(25), aSpd(95), '#2ea44f', 9);    // green normal arc
+  arcAz(ctx, 120, aSpd(95), aSpd(140), '#e8b31a', 9);   // yellow caution to Vne
+  arcAz(ctx, 128, aSpd(20), aSpd(60), '#e9edf1', 5);    // white flap arc, outboard
+  tick(ctx, aSpd(140), 94, 126, 5, RED);                     // Vne red radial meets the band
+  for (let v = 0; v <= VMAX; v += 5) {
+    const big = v % 10 === 0;
+    tick(ctx, aSpd(v), big ? 96 : 103, 116, big ? 3 : 1.6);
+    if (v % 20 === 0) label(ctx, aSpd(v), 78, String(v), 14);
+  }
+  ctx.fillStyle = DIMI; ctx.font = FONT(12, 600);
+  ctx.textAlign = 'center'; ctx.fillText('AIRSPEED', 150, 106); ctx.fillText('KNOTS', 150, 196);
+  /* tapered paddle needle: broad at 60% length, waist near the hub */
+  const naz = aSpd(Math.min(s.ias, VMAX));
+  const p = (r, o) => [150 + Math.sin(naz * D2R) * r + Math.cos(naz * D2R) * o,
+                       150 - Math.cos(naz * D2R) * r + Math.sin(naz * D2R) * o];
+  ctx.fillStyle = INK; ctx.beginPath();
+  ctx.moveTo(...p(102, 0)); ctx.lineTo(...p(58, 5.5)); ctx.lineTo(...p(30, 3.5)); ctx.lineTo(...p(-28, 3.5));
+  ctx.lineTo(...p(-28, -3.5)); ctx.lineTo(...p(30, -3.5)); ctx.lineTo(...p(58, -5.5)); ctx.closePath(); ctx.fill();
+  hub(ctx, 11);
+}
+
+/* ================= GAUGE 2 — ATTITUDE ================= */
+/* Sky/ground split, pitch ladder ±30 (5° minors, 10° labeled), roll pointer vs
+   fixed top scale (0,±10,±20,±30,±45,±60), fixed miniature airplane. */
+function drawAI(ctx, s) {
+  face(ctx);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(150, 150, 126, 0, TAU); ctx.clip();
+  ctx.translate(150, 150); ctx.rotate(-s.bank * D2R); ctx.translate(0, s.pitch * 6.2);
+  const sky = ctx.createLinearGradient(0, -260, 0, 0); sky.addColorStop(0, SKY2); sky.addColorStop(1, SKY1);
+  const gnd = ctx.createLinearGradient(0, 0, 0, 260); gnd.addColorStop(0, GND1); gnd.addColorStop(1, GND2);
+  ctx.fillStyle = sky; ctx.fillRect(-320, -420, 640, 420);
+  ctx.fillStyle = gnd; ctx.fillRect(-320, 0, 640, 420);
+  ctx.strokeStyle = '#f4f6f8'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-320, 0); ctx.lineTo(320, 0); ctx.stroke();
+  ctx.lineWidth = 2; ctx.font = FONT(12, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let p = -30; p <= 30; p += 5) {
+    if (!p) continue;
+    const y = -p * 6.2, half = p % 10 === 0 ? 52 : 26;
+    ctx.strokeStyle = '#eef1f4'; ctx.beginPath(); ctx.moveTo(-half, y); ctx.lineTo(half, y); ctx.stroke();
+    if (p % 10 === 0) { ctx.fillStyle = '#eef1f4'; ctx.fillText(Math.abs(p), -66, y); ctx.fillText(Math.abs(p), 66, y); }
+  }
+  /* roll pointer rides the horizon card: undo pitch shift, draw at card top */
+  ctx.translate(0, -s.pitch * 6.2);
+  ctx.fillStyle = AMBER;
+  ctx.beginPath(); ctx.moveTo(0, -122); ctx.lineTo(-9, -104); ctx.lineTo(9, -104); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  /* fixed outer roll scale (0, ±10, ±20, ±30, ±45, ±60) */
+  for (const a of [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60]) {
+    const big = Math.abs(a) === 60 || Math.abs(a) === 45 || a === 0;
+    tick(ctx, a, 128, big ? 112 : 119, a === 0 ? 3 : 2);
+  }
+  /* fixed wings-level index: distinct triangle at top center (research:
+     real dials mark zero bank with a shape, not a marginally wider tick) */
+  ctx.fillStyle = INK; ctx.beginPath();
+  ctx.moveTo(150, 21); ctx.lineTo(145, 11); ctx.lineTo(155, 11); ctx.closePath(); ctx.fill();
+  /* fixed miniature airplane */
+  ctx.strokeStyle = '#ffd24a'; ctx.fillStyle = '#ffd24a';
+  ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(96, 150); ctx.lineTo(134, 150); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(166, 150); ctx.lineTo(204, 150); ctx.stroke();
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(134, 150); ctx.lineTo(142, 158); ctx.lineTo(158, 158); ctx.lineTo(166, 150); ctx.stroke();
+  ctx.beginPath(); ctx.arc(150, 152, 3.5, 0, TAU); ctx.fill();
+  ctx.lineCap = 'butt';
+  /* dead-data flag: without GPS and without phone sensors the eased horizon
+     looks healthy through a tunnel; a real AI drops its flag (research 1) */
+  if (s.flags.attDead) flagOverlay(ctx, 'GPS LOST');
+}
+
+/* ================= GAUGE 3 — ALTIMETER ================= */
+/* 3 needles (100s long · 1000s short wide · 10 000s barber-pole) + Kollsman
+   window + low-altitude crosshatch (research: private/research/alt.md). */
+function drawALT(ctx, s) {
+  face(ctx);
+  for (let n = 0; n < 50; n++) {             // minor: 50 ft each (360°/50 ft·10)
+    const az = n * 7.2, big = n % 5 === 0;
+    tick(ctx, az, big ? 100 : 107, 114, big ? 3 : 1.6);
+  }
+  for (let n = 0; n < 10; n++) label(ctx, n * 36, 84, String(n), 17);
+  ctx.fillStyle = DIMI; ctx.font = FONT(11, 600);
+  ctx.textAlign = 'center'; ctx.fillText('ALTITUDE', 150, 112); ctx.fillText('100 FT', 150, 194);
+  /* crosshatch: a low-altitude band on real dials (visible below 10,000 ft,
+     PHAK ch. 8). A car is always low, so an always-on band carries nothing:
+     it does signal work instead, hatched until the browser delivers an
+     altitude, clear once it does */
+  if (s.flags.altDead) {
+  ctx.save(); ctx.beginPath();
+  ctx.arc(150, 150, 92, (196 - 90) * D2R, (164 - 90) * D2R);
+  ctx.arc(150, 150, 40, (164 - 90) * D2R, (196 - 90) * D2R, true); ctx.closePath(); ctx.clip();
+  ctx.strokeStyle = '#e8b31a'; ctx.lineWidth = 5;
+  for (let x = 40; x < 260; x += 13) { ctx.beginPath(); ctx.moveTo(x, 130); ctx.lineTo(x + 110, 240); ctx.stroke(); }
+  ctx.restore();
+  }
+  /* Kollsman window — live baro setting (knob-driven, default 29.92) */
+  ctx.fillStyle = '#05070a'; roundRect(ctx, 176, 138, 52, 22, 4); ctx.fill();
+  ctx.strokeStyle = '#454c55'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#dfe5ea'; ctx.font = FONT(13, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(s.baro.toFixed(2), 202, 149.5);
+  ctx.fillStyle = DIMI; ctx.font = FONT(8.5, 600); ctx.fillText('IN HG', 202, 166);
+  /* needles */
+  const frac = v => ((v % 1) + 1) % 1;
+  needle(ctx, frac(s.alt / 100000) * 360, 52, 9, INK, 0);          // 10 000s — stubby
+  for (let i = 0; i < 5; i++) {                                     // barber-pole band (yellow/black)
+    ctx.fillStyle = i % 2 ? '#101317' : '#e8b31a';
+    const [x0, y0] = xy(frac(s.alt / 100000) * 360, 8 + i * 9), [x1, y1] = xy(frac(s.alt / 100000) * 360, 8 + (i + 1) * 9);
+    ctx.strokeStyle = i % 2 ? '#101317' : '#e8b31a'; ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  needle(ctx, frac(s.alt / 10000) * 360, 72, 7, INK, 14);          // 1000s
+  needle(ctx, frac(s.alt / 1000) * 360, 104, 3.5, INK, 26);        // 100s
+  hub(ctx, 9);
+}
+
+/* ================= GAUGE 4 — TURN COORDINATOR ================= */
+/* Rate gyro display + inclinometer (research: private/research/tc.md). The
+   standard-rate marks sit 20 deg BELOW horizontal, tilted parallel to the
+   wing at standard-rate bank, and the wings reach them: a 3 deg/s turn
+   aligns the wingtip with its mark (PHAK fig. 8-22). Wings-level reference
+   ticks just under horizontal give the real two-pairs-per-side layout. Ball
+   physics: lateral acceleration atan(v*w/g) from groundspeed — the taxi case
+   a car always lives in — so deflection scales with speed (2.7 deg at 20 mph,
+   10.8 at 80 mph for standard rate) instead of tracking turn rate alone. */
+function drawTC(ctx, s) {
+  face(ctx);
+  /* standard-rate marks below the horizontal, each parallel to ITS wing at
+     standard-rate bank: right turn dips the right wing (mark reads \\), left
+     turn dips the left wing (mark reads /) */
+  const bA = 24 * D2R, ux = Math.cos(bA), uy = Math.sin(bA);
+  ctx.strokeStyle = INK; ctx.lineWidth = 3.5;
+  for (const az of [110, 250]) {
+    const sgn = az === 110 ? 1 : -1;
+    const [cx0, cy0] = xy(az, 100);
+    ctx.beginPath(); ctx.moveTo(cx0 - 9 * ux, cy0 - 9 * sgn * uy); ctx.lineTo(cx0 + 9 * ux, cy0 + 9 * sgn * uy); ctx.stroke();
+  }
+  tick(ctx, 96, 96, 106, 2); tick(ctx, 264, 96, 106, 2);        // wings-level references
+  ctx.font = FONT(13, 700); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const [lx, ly] = xy(250, 78); ctx.fillText('L', lx, ly);
+  const [rx, ry] = xy(110, 78); ctx.fillText('R', rx, ry);
+  ctx.fillStyle = DIMI; ctx.font = FONT(11, 600); ctx.fillText('2 MIN', 150, 196);
+  ctx.font = FONT(8.5, 600); ctx.fillText('NO PITCH INFORMATION', 150, 209);
+  /* inclinometer: light tube, paired center hash marks, physics-driven ball.
+     az 180 = 6 o'clock in the 0=up/cw convention; right turn puts the ball
+     left, on the outside of the turn */
+  ctx.fillStyle = '#1c2128';
+  ctx.beginPath(); ctx.arc(150, 150, 136, (143 - 90) * D2R, (217 - 90) * D2R);
+  ctx.arc(150, 150, 112, (217 - 90) * D2R, (143 - 90) * D2R, true); ctx.closePath(); ctx.fill();
+  arcAz(ctx, 136, 143, 217, '#8a939c', 2.5); arcAz(ctx, 112, 143, 217, '#8a939c', 2.5);
+  tick(ctx, 170, 112, 136, 2, '#5a626b'); tick(ctx, 190, 112, 136, 2, '#5a626b');
+  tick(ctx, 178, 112, 136, 2.5, '#cfd4da'); tick(ctx, 182, 112, 136, 2.5, '#cfd4da');
+  const vms = s.ias / MS2KT;                                     // kt -> m/s
+  const off = Math.atan2(vms * s.turnRate * D2R, 9.81) / D2R;    // lateral-accel tilt
+  const ballAz = 180 + Math.max(-14, Math.min(14, off));
+  const [bx, by] = xy(ballAz, 124);
+  const bal = ctx.createRadialGradient(bx - 3, by - 4, 2, bx, by, 10);
+  bal.addColorStop(0, '#3d454e'); bal.addColorStop(1, '#05070a');
+  ctx.fillStyle = bal; ctx.beginPath(); ctx.arc(bx, by, 9.5, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#cfd4da'; ctx.lineWidth = 1.5; ctx.stroke();
+  /* airplane symbol: wings extend to the marks so 3 deg/s visibly aligns */
+  const sym = Math.max(-30, Math.min(30, s.turnRate * 8));
+  ctx.save(); ctx.translate(150, 150); ctx.rotate(sym * D2R);
+  ctx.fillStyle = '#f2f4f6'; ctx.strokeStyle = '#f2f4f6';
+  ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-95, 0); ctx.lineTo(-26, 0); ctx.lineTo(-34, 9); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(95, 0); ctx.lineTo(26, 0); ctx.lineTo(34, 9); ctx.stroke();
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -20); ctx.stroke();
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-9, -20); ctx.lineTo(9, -20); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 2, 5, 0, TAU); ctx.fill();
+  ctx.lineCap = 'butt'; ctx.restore();
+}
+
+/* ================= GAUGE 5 — HSI =================
+   Rotating card + fixed lubber + heading bug. The course pointer and its
+   whole CDI assembly (deviation bar, dot scale, TO/FROM triangle) rotate as
+   one unit, over a fixed miniature airplane: a plan view, the bar shows
+   where the car sits relative to the course line. Deviation is cross-track
+   distance from the course line anchored where CRS was last set (long-press
+   the CRS knob to re-anchor); full scale 0.25 NM, dots at half scale, rings
+   at full scale. TO/FROM points at the pointer head when the anchor is
+   ahead (TO) or the tail when it's behind (FROM). */
+const XTK_FS = 463;                                // full-scale cross-track, m (~0.25 NM)
+function drawHI(ctx, s) {
+  face(ctx);
+  const rot = d => d - s.hdg;
+  const NAMES = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+  for (let d = 0; d < 360; d += 5) {
+    const big = d % 30 === 0, mid = d % 10 === 0;
+    tick(ctx, rot(d), big ? 92 : mid ? 102 : 108, 114, big ? 3.4 : mid ? 2.2 : 1.5);
+  }
+  for (let d = 0; d < 360; d += 30) {
+    const nm = NAMES[d], txt = nm || String(d / 10);
+    label(ctx, rot(d), 74, txt, nm ? 21 : 16, nm ? INK : DIMI);
+  }
+  /* RMI-style bearing pointer: live bearing to the ?tgt= waypoint, riding
+     the card under the CDI assembly */
+  if (s.tgtBrg != null) {
+    const baz = s.tgtBrg - s.hdg;
+    ctx.strokeStyle = '#b9c0c8'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(...xy(baz + 180, 24)); ctx.lineTo(...xy(baz, 104)); ctx.stroke();
+    ctx.fillStyle = '#b9c0c8';
+    const [p1x, p1y] = xy(baz, 114), [p2x, p2y] = xy(baz - 5, 100), [p3x, p3y] = xy(baz + 5, 100);
+    ctx.beginPath(); ctx.moveTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.lineTo(p3x, p3y); ctx.closePath(); ctx.fill();
+  }
+  /* heading bug: orange double-triangle riding the card at the bug heading */
+  const bugAz = rot(s.bug);
+  ctx.fillStyle = '#ff7f00';
+  for (const dir of [1, -1]) {                // two wedges biting the ring
+    ctx.beginPath();
+    const [ax, ay] = xy(bugAz + dir * 4, 118), [bx2, by2] = xy(bugAz + dir * 8, 96), [cx3, cy3] = xy(bugAz, 104);
+    ctx.moveTo(ax, ay); ctx.lineTo(bx2, by2); ctx.lineTo(cx3, cy3); ctx.closePath(); ctx.fill();
+  }
+  /* course pointer + CDI assembly, rotating as one unit about the plane */
+  const crsAz = rot(s.course);
+  ctx.save(); ctx.translate(150, 150); ctx.rotate(crsAz * D2R);
+  /* deviation scale: dots at half scale, rings at full scale */
+  ctx.fillStyle = '#8a939c';
+  for (const dx of [-16, 16]) { ctx.beginPath(); ctx.arc(dx, 0, 2.6, 0, TAU); ctx.fill(); }
+  ctx.strokeStyle = '#8a939c'; ctx.lineWidth = 1.8;
+  for (const dx of [-32, 32]) { ctx.beginPath(); ctx.arc(dx, 0, 4.4, 0, TAU); ctx.stroke(); }
+  /* deviation bar: full height of the scale, slides with cross-track;
+     off full scale it parks just PAST the ring and the box below
+     annunciates the number (Garmin: drifting vs hopelessly off must differ) */
+  const bx = Math.max(-1, Math.min(1, s.dev)) * (s.xtkOff ? 38 : 32);
+  ctx.strokeStyle = AMBER; ctx.lineWidth = 6.5;
+  ctx.beginPath(); ctx.moveTo(bx, -64); ctx.lineTo(bx, 64); ctx.stroke();
+  /* course pointer shafts: arrowhead at the course end, barbed tail opposite */
+  ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, -40); ctx.lineTo(0, -112); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, 30); ctx.lineTo(0, 112); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-9, 106); ctx.lineTo(9, 106); ctx.stroke();   // tail barb
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = INK;
+  ctx.beginPath(); ctx.moveTo(0, -122); ctx.lineTo(-10, -96); ctx.lineTo(10, -96); ctx.closePath(); ctx.fill();
+  /* TO/FROM triangle beside the shaft, pointing at the head (TO) or tail (FROM) */
+  if (s.tofrom) {
+    const ty = s.tofrom > 0 ? -80 : 80, dir = s.tofrom > 0 ? -1 : 1;
+    ctx.beginPath(); ctx.moveTo(13, ty + dir * 8); ctx.lineTo(7, ty - dir * 4); ctx.lineTo(19, ty - dir * 4); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  /* fixed miniature airplane: the reference the deviation bar moves against */
+  ctx.strokeStyle = INK; ctx.lineCap = 'round';
+  ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(122, 156); ctx.lineTo(178, 156); ctx.stroke();
+  ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(150, 136); ctx.lineTo(150, 162); ctx.stroke();
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(140, 165); ctx.lineTo(160, 165); ctx.stroke();
+  ctx.lineCap = 'butt';
+  /* under-airplane data box: XTK number when off scale, full-scale value
+     otherwise (the scale always carries its meaning, Garmin-style) */
+  if (s.xtk != null) {
+    ctx.fillStyle = 'rgba(5,7,10,.85)'; roundRect(ctx, 118, 186, 64, 17, 4); ctx.fill();
+    ctx.strokeStyle = '#3a4048'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.font = FONT(9.5, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (s.xtkOff) { ctx.fillStyle = AMBER; ctx.fillText('XTK ' + (Math.abs(s.xtk) / 1852).toFixed(2) + ' NM', 150, 195); }
+    else { ctx.fillStyle = DIMI; ctx.fillText('0.25 NM', 150, 195); }
+  }
+  /* CRS / BUG readout plates (bottom corners, opaque so card never shows through) */
+  ctx.fillStyle = 'rgba(5,7,10,.9)'; roundRect(ctx, 30, 118, 58, 20, 5); ctx.fill();
+  roundRect(ctx, 212, 118, 58, 20, 5); ctx.fill();
+  ctx.font = FONT(11.5, 700); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText((s.obs ? 'OBS ' : 'CRS ') + String(Math.round(s.course)).padStart(3, '0'), 59, 128.5);
+  ctx.fillStyle = '#ff7f00';
+  ctx.fillText('BUG ' + String(Math.round(s.bug)).padStart(3, '0'), 241, 128.5);
+  /* TGT plate: distance to the waypoint in NM (dashes pre-fix); tapping the
+     plate region on the canvas re-activates the direct leg */
+  if (s.tgt) {
+    ctx.fillStyle = 'rgba(5,7,10,.9)'; roundRect(ctx, 203, 194, 58, 18, 5); ctx.fill();
+    ctx.strokeStyle = '#3a4048'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.font = FONT(11, 700); ctx.fillStyle = INK;
+    ctx.fillText(s.tgtDist == null ? 'TGT --' : 'TGT ' + (s.tgtDist / 1852).toFixed(1), 232, 203.5);
+  }
+  /* nav-source annunciation, Garmin convention: green GPS on the lower
+     row inboard of the card ring (left edge r~68, clear of the 92-114
+     tick band), sharing the TGT plate's baseline; shown only while that
+     source is alive (course anchored and fixes flowing) — the field is
+     blank pre-fix like a unit with no source selected */
+  if (s.xtk != null) {
+    ctx.fillStyle = '#3fd66f'; ctx.font = FONT(11, 700);
+    ctx.fillText('GPS', 118, 202);
+  }
+  /* lubber: boxed digital heading with a beak at the reading point
+     (Garmin convention), replacing the bare triangle */
+  ctx.fillStyle = '#05070a'; roundRect(ctx, 127, 4, 46, 18, 4); ctx.fill();
+  ctx.strokeStyle = '#454c55'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = INK; ctx.font = FONT(13, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(Math.round(((s.hdg % 360) + 360) % 360)).padStart(3, '0') + '°', 150, 13.5);
+  ctx.fillStyle = AMBER; ctx.beginPath();
+  ctx.moveTo(150, 31); ctx.lineTo(145, 22); ctx.lineTo(155, 22); ctx.closePath(); ctx.fill();
+  tick(ctx, 0, 31, 58, 3, AMBER);
+  if (s.flags.gpsLost) flagOverlay(ctx, 'GPS LOST');
+  else if (s.flags.headingInvalid) flagOverlay(ctx, 'NO GS');
+}
+
+/* ================= GAUGE 6 — VERTICAL SPEED ================= */
+/* United 7000 family (research: private/research/vsi.md): +/-2000 fpm, 0 at
+   9 o'clock, numerals every 500 in hundreds, minor tick every 100, halves
+   of 176 deg meeting at 3 o'clock behind an end-of-scale bracket. Tick
+   spacing follows the MEASURED dial (deg per 500-fpm step on the climb half,
+   mirrored for descent): the zero end is the tightest sector, mid-scale the
+   most open - the folklore "compressed outer ranges" is only half right. */
+function drawVSI(ctx, s) {
+  face(ctx);
+  const SEG = [36.3, 45.7, 50.1, 43.9];           // sums to 176
+  const az = f => {
+    const x = Math.min(4, Math.abs(f) / 500), i = Math.floor(x);
+    const g = (i ? SEG.slice(0, i).reduce((a, b) => a + b, 0) : 0) + (x - i) * SEG[Math.min(i, 3)];
+    return 270 + Math.sign(f) * g;
+  };
+  for (let f = -2000; f <= 2000; f += 100) {
+    const big = f % 500 === 0;
+    tick(ctx, az(f), big ? 96 : 102, big ? 114 : Math.abs(f) < 1200 ? 114 : 109, f === 0 ? 3.5 : big ? 3 : 1.6);
+    if (big) label(ctx, az(f), 84, String(Math.abs(f) / 100),
+      f === 0 || Math.abs(f) === 2000 ? 15 : 13, INK);
+  }
+  tick(ctx, 90, 96, 114, 3);                       // end-of-scale bracket at 3 o'clock
+  /* curved UP/DN arrows sweeping from 0 toward each 5 */
+  for (const sgn of [1, -1]) {
+    const a1 = 270 + sgn * 9, a2 = 270 + sgn * 33;
+    arcAz(ctx, 62, a1, a2, DIMI, 1.5);
+    const [hx, hy] = xy(a2, 62), tang = a2 + sgn * 90;   // travel direction at the head
+    const tx0 = Math.sin(tang * D2R), ty0 = -Math.cos(tang * D2R), px0 = Math.cos(tang * D2R), py0 = Math.sin(tang * D2R);
+    ctx.fillStyle = DIMI; ctx.beginPath();
+    ctx.moveTo(hx + tx0 * 7, hy + ty0 * 7);
+    ctx.lineTo(hx - tx0 * 3 + px0 * 3.5, hy - ty0 * 3 + py0 * 3.5);
+    ctx.lineTo(hx - tx0 * 3 - px0 * 3.5, hy - ty0 * 3 - py0 * 3.5);
+    ctx.closePath(); ctx.fill();
+    ctx.font = FONT(9, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const [tx2, ty2] = xy(270 + sgn * 21, 47); ctx.fillText(sgn > 0 ? 'UP' : 'DN', tx2, ty2);
+  }
+  ctx.fillStyle = DIMI; ctx.font = FONT(11.5, 600);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('VERTICAL SPEED', 150, 116);
+  ctx.font = FONT(10.5, 600); ctx.fillText('X100 FPM', 150, 196);
+  needle(ctx, az(Math.max(-2000, Math.min(2000, s.vsi))), 100, 4.5, INK, 26); hub(ctx, 10);
+}
+
+/* ================= STAGE ================= */
+const GAUGES = [
+  ['AIRSPEED', drawASI], ['ATTITUDE', drawAI], ['ALTIMETER', drawALT],
+  ['TURN COORD', drawTC], ['HEADING', drawHI], ['VERT SPEED', drawVSI]
+];
+const FLAGS = { gpsLost: false };
+const canv = [], caps = [], ctxs = [], cells = [];
+{
+  const panel = document.getElementById('panel');
+  for (const [name] of GAUGES) {
+    const g = document.createElement('div'); g.className = 'gauge';
+    const b = document.createElement('div'); b.className = 'bezel';
+    const c = document.createElement('canvas'); c.width = S * 2; c.height = S * 2;
+    c.style.width = c.style.height = S + 'px';
+    b.appendChild(c); g.appendChild(b);
+    const p = document.createElement('div'); p.className = 'cap';
+    p.innerHTML = '<b>' + name + '</b><span class="val"></span><span class="flag"></span>';
+    g.appendChild(p); panel.appendChild(g);
+    const cx2 = c.getContext('2d'); cx2.scale(2, 2);
+    canv.push(c); ctxs.push(cx2); cells.push(g);
+    caps.push(p);
+  }
+}
+const VALS = [
+  s => ` IAS ${Math.round(s.ias)} kt`,
+  s => ` P${s.pitch >= 0 ? '+' : ''}${s.pitch.toFixed(0)}° R${s.bank >= 0 ? '+' : ''}${s.bank.toFixed(0)}°`,
+  s => ` ALT ${Math.round(s.alt)} ft`,
+  s => ` TR ${s.turnRate.toFixed(1)}°/s`,
+  s => ` HDG ${String(Math.round(s.hdg)).padStart(3, '0')}° CRS ${String(Math.round(s.course)).padStart(3, '0')} XTK ${s.xtk == null ? '–' : (Math.abs(s.xtk / 1852)).toFixed(2) + (s.xtk < 0 ? 'L' : 'R')}${s.tgt && s.tgtDist != null ? ` TGT ${(s.tgtDist / 1852).toFixed(1)}` : ''}`,
+  s => ` VSI ${s.vsi >= 0 ? '+' : ''}${Math.round(s.vsi)} fpm`
+];
+/* ================= RAW GPS FOOTER =================
+   Live text view of the raw geolocation input. A dash marks a field the
+   browser isn't providing (some vehicle browsers may omit speed or heading). */
+let rawCache = '';
+function rawGPS() {
+  const c = GP.last;
+  const f = (k, d, u) => {
+    const v = c == null ? null : k === 'altacc' ? c.altitudeAccuracy : c[k];
+    return v == null ? '–' : (+v).toFixed(d) + (u || '');
+  };
+  let age = '–';
+  if (c && GP.ts) {
+    const a = Math.max(0, (Date.now() - GP.ts) / 1000);
+    age = a < 90 ? a.toFixed(0) + ' s' : (a / 60).toFixed(0) + ' min';
+  }
+  return ['lat ' + f('latitude', 6), 'lon ' + f('longitude', 6), 'acc ' + f('accuracy', 0, ' m'),
+    'alt ' + f('altitude', 1, ' m'), 'altacc ' + f('altacc', 0, ' m'), 'hdg ' + f('heading', 1, '°'),
+    'spd ' + f('speed', 2, ' m/s'), 'fix ' + age + ' ago'].join(' · ');
+}
+function render() {
+  const s = state();
+  GAUGES.forEach(([name, draw], i) => {
+    draw(ctxs[i], s);
+    caps[i].querySelector('.val').textContent = VALS[i](s);
+    const fl = s.flags.gpsLost && i === 4 ? 'GPS LOST' : s.flags.headingInvalid && i === 4 ? 'NO GS' : '';
+    caps[i].querySelector('.flag').textContent = fl;
+  });
+  const raw = rawGPS();
+  if (raw !== rawCache) { rawCache = raw; document.getElementById('raw').textContent = raw; }
+  syncKnobs();   // CRS knob index tracks the slaved pointer in leg mode
+  return s;
+}
+
+/* ================= KNOB INTERACTION (round 4: cell-corner HTML knobs) =================
+   Same model as round 3 — DRAG continuous (1:1 deg; baro 1° ≈ 0.005 inHg),
+   TAP stepper (right half + / left half −; 5° / 0.01 inHg), DOUBLE-TAP reset.
+   Knobs are HTML elements in the cell corners (canvas is border-radius:50%
+   and would clip canvas-drawn corners); index line rotates with the value. */
+/* the course line is anchored where CRS is set: re-anchored on every course
+   change and on a stationary hold of the CRS knob; anchored at the first fix
+   if CRS was set before GPS had a position */
+function anchorCourse() {
+  if (GP.last && GP.last.latitude != null) GP.crsOrigin = { lat: GP.last.latitude, lon: GP.last.longitude };
+}
+/* (re)activate the direct leg, Garmin D-to: anchor at the current position and
+   slave the course pointer to the bearing from here to the ?tgt= waypoint.
+   Called at the first fix, on a TGT-plate tap, and when leaving OBS mode. */
+function reactivateDirect() {
+  if (!GP.tgt || !GP.last || GP.last.latitude == null) return;
+  GP.obs = false;
+  GP.legOrigin = { lat: GP.last.latitude, lon: GP.last.longitude };
+  const eT = (GP.tgt.lon - GP.last.longitude) * D2R * Math.cos(GP.last.latitude * D2R) * 6371000;
+  const nT = (GP.tgt.lat - GP.last.latitude) * D2R * 6371000;
+  KNOBS.course = (Math.atan2(eT, nT) / D2R + 360) % 360;
+}
+const KNOBMAP = {
+  bug:    { set: v => KNOBS.bug = ((v % 360) + 360) % 360,       step: 5,   reset: 135 },
+  course: { set: v => {
+    if (GP.tgt && !GP.obs) return;              // leg mode: the pointer is slaved, the knob is inert
+    KNOBS.course = ((v % 360) + 360) % 360;
+    if (!GP.tgt) anchorCourse();
+  }, step: 5, reset: 90,
+    hold: () => { if (GP.tgt) { GP.obs = !GP.obs; if (!GP.obs) reactivateDirect(); } else anchorCourse(); } },
+  baro:   { set: v => {
+    const nv = Math.max(28.1, Math.min(31, v));
+    GP.altDisp += (nv - KNOBS.baro) * 1000;   // knob motion is a mechanical linkage: snap the pointers, never ease
+    KNOBS.baro = nv;
+  }, step: .01, reset: 29.92 },   // real scale range 28.10-31.00
+};
+const knobEls = {};
+function syncKnobs() {   // rotate only the index line — labels stay upright
+  knobEls.bug.querySelector('i').style.transform = `rotate(${KNOBS.bug}deg)`;
+  knobEls.course.querySelector('i').style.transform = `rotate(${KNOBS.course}deg)`;
+  knobEls.baro.querySelector('i').style.transform = `rotate(${(KNOBS.baro - 28) / 4 * 360}deg)`;
+}
+function mkKnob(cell, type, label, corner) {
+  const k = document.createElement('div'); k.className = 'knob';
+  k.innerHTML = '<i></i><b>' + label + '</b>';
+  k.style[corner] = '6px'; k.style.bottom = '46px';
+  cell.appendChild(k); knobEls[type] = k;
+  const ang = e => { const r = k.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) / D2R; };
+  let drag = null;
+  k.addEventListener('pointerdown', e => {
+    drag = { last: ang(e), x0: e.clientX, y0: e.clientY, moved: false, held: false,
+             hold: setTimeout(() => {                    // stationary hold (CRS: re-anchor the course line)
+               if (KNOBMAP[type].hold) { KNOBMAP[type].hold(); syncKnobs(); render(); drag.held = true; }
+             }, 600) };
+    k.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  k.addEventListener('pointermove', e => {
+    if (!drag) return;
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; clearTimeout(drag.hold); }
+    if (!drag.moved) return;
+    const a = ang(e); let d = a - drag.last;
+    if (d > 180) d -= 360; else if (d < -180) d += 360;
+    drag.last = a;
+    if (type === 'baro') KNOBMAP.baro.set(KNOBS.baro + d * .005);
+    else KNOBMAP[type].set((type === 'bug' ? KNOBS.bug : KNOBS.course) + d);
+    syncKnobs(); render();
+  });
+  k.addEventListener('pointerup', e => {
+    if (!drag) return;
+    clearTimeout(drag.hold);
+    if (drag.held) { drag = null; return; }              // the hold already acted
+    if (!drag.moved) {                                   // tap = stepper
+      const r = k.getBoundingClientRect(), k2 = KNOBMAP[type];
+      const cur = type === 'bug' ? KNOBS.bug : type === 'course' ? KNOBS.course : KNOBS.baro;
+      k2.set(cur + (e.clientX >= r.left + r.width / 2 ? k2.step : -k2.step));
+      syncKnobs(); render();
+    }
+    drag = null;
+  });
+  k.addEventListener('dblclick', () => {                 // double-tap = reset
+    KNOBMAP[type].set(KNOBMAP[type].reset); syncKnobs(); render();
+  });
+  k.addEventListener('pointercancel', () => { if (drag) { clearTimeout(drag.hold); drag = null; } });
+}
+mkKnob(cells[2], 'baro',   'BARO', 'left');
+mkKnob(cells[4], 'bug',    'HDG',  'left');
+mkKnob(cells[4], 'course', 'CRS',  'right');
+/* AI cage knob (left corner of the attitude cell, mirroring a real AI's
+   reference-plane adjuster): tap = level here, stationary hold = clear.
+   A drag cancels, so grabbing-and-turning never wipes the calibration. */
+function mkLevelKnob(cell) {
+  const k = document.createElement('div'); k.className = 'knob';
+  k.innerHTML = '<i></i><b>LVL</b>';
+  k.style.left = '6px'; k.style.bottom = '46px';
+  cell.appendChild(k);
+  let hold = null, x0 = 0, y0 = 0, moved = false;
+  k.addEventListener('pointerdown', e => {
+    moved = false; x0 = e.clientX; y0 = e.clientY;
+    hold = setTimeout(() => {
+      try { localStorage.removeItem('sixpack.cal') } catch (err) {}
+      CAL = null; hold = 'done';
+    }, 600);
+    k.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  k.addEventListener('pointermove', e => {
+    if (Math.hypot(e.clientX - x0, e.clientY - y0) > 6) {
+      moved = true;
+      if (hold && hold !== 'done') { clearTimeout(hold); hold = null; }
+    }
+  });
+  k.addEventListener('pointerup', () => {
+    if (hold === 'done') { hold = null; return; }
+    if (hold) clearTimeout(hold);
+    hold = null;
+    if (moved) return;                                   // a drag is not a tap
+    const fr = sensorFrame();
+    if (fr) {
+      CAL = { g0: fr.g, r: fr.r };
+      try { localStorage.setItem('sixpack.cal', JSON.stringify(CAL)) } catch (err) {}
+    }
+  });
+  k.addEventListener('pointercancel', () => { if (hold && hold !== 'done') clearTimeout(hold); hold = null; });
+  k.addEventListener('contextmenu', e => e.preventDefault());
+}
+mkLevelKnob(cells[1]);
+syncKnobs();
+/* TGT plate tap on the HSI canvas re-activates the direct leg (Garmin D-to).
+   Coordinates normalize through the bounding rect so panel zoom is irrelevant. */
+canv[4].addEventListener('click', e => {
+  const r = canv[4].getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * 300, y = (e.clientY - r.top) / r.height * 300;
+  if (GP.tgt && x >= 200 && x <= 264 && y >= 191 && y <= 215) { reactivateDirect(); syncKnobs(); render(); }
+});
+
+/* ================= GPS WATCH =================
+   Started at page load; failures re-arm via onErr. */
+function startWatch() {
+  GP.watch = navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+}
+function linFit(s, tw) {                        // weighted least-squares y ~ yx + b(t - tx)
+  const n = s.length, now = performance.now();
+  if (n < 3 || s[n - 1].t - s[0].t < 4000) return null;   // ignore the cold-start jump: need >= 4 s of history
+  let sw = 0, sx = 0, sy = 0, sxy = 0, sxx = 0;
+  for (const p of s) {
+    const w = (p.s ? 1 / (p.s * p.s) : 1) * (tw ? Math.exp(-(now - p.t) / tw) : 1);
+    // sigma weights for altitude samples; tw (ms) exponentially forgets old
+    // fixes so a turn that ended is gone in seconds, not at window's end
+    sw += w; sx += w * p.t; sy += w * p.y; sxy += w * p.t * p.y; sxx += w * p.t * p.t;
+  }
+  const den = sw * sxx - sx * sx; if (!den) return null;
+  return { b: (sw * sxy - sx * sy) / den, tx: sx / sw, yx: sy / sw };
+}
+function slopeOf(s, tw) {                       // least-squares dy/dt, y per ms
+  const f = linFit(s, tw); return f == null ? null : f.b;
+}
+function vsiFromSamples(vcap) {                 // ft/ms -> fpm, clamped to the speed-plausible cap
+  if (vcap <= 0) return 0;   // parked/stale: a stationary car has no vertical speed
+  const sl = slopeOf(GP.samples, 4500);         // 4.5 s forget: grades read in ~4 s, not ~12
+  if (sl == null) return 0;
+  const fpm = sl * 60000;
+  if (Math.abs(fpm) < 70) return 0;             // regression noise floor, under dial resolution
+  const cap = Math.min(vcap, 2000);             // 2000 = dial full scale
+  return Math.max(-cap, Math.min(cap, fpm));
+}
+function gpsState(sn) {
+  sn = sn || sensNow();
+  const c = GP.last, now = performance.now();
+  const ias = (c.speed != null ? c.speed : 0) * MS2KT;
+  const ik = GP.iasT == null ? 1 : 1 - Math.exp(-(now - GP.iasT) / 500);   // ASI needle glides between fixes
+  GP.iasT = now;
+  GP.iasDisp += (ias - GP.iasDisp) * ik;
+  let hdg = c.heading; if (hdg == null) hdg = GP.lastHdg || 0; else GP.lastHdg = hdg;
+  if (sn && sn.mag != null && ias < 5) { hdg = sn.mag; GP.lastHdg = hdg; }   // parked: magnetic beats stale course
+  let alt = GP.lastAlt || 0;
+  if (c.altitude != null) { alt = c.altitude * M2FT; GP.lastAlt = alt; }   // GP.lastAlt stays TRUE altitude
+  alt += (KNOBS.baro - 29.92) * 1000;                       // Kollsman coupling, live (research 1)
+  const ak = GP.altT == null ? 1 : 1 - Math.exp(-(now - GP.altT) / 600);   // needles glide between fixes
+  GP.altT = now;
+  GP.altDisp += (alt - GP.altDisp) * ak;
+  /* WAYPOINT (?tgt): live vector to the target. Leg mode (default) slaves the
+     course pointer to the direct bearing captured at activation (first fix,
+     TGT-plate tap, or leaving OBS); OBS mode runs the course line through the
+     target as a station radial. */
+  if (GP.tgt && c.latitude != null && c.longitude != null) {
+    const eT = (GP.tgt.lon - c.longitude) * D2R * Math.cos(c.latitude * D2R) * 6371000;
+    const nT = (GP.tgt.lat - c.latitude) * D2R * 6371000;
+    GP.tgtDist = Math.hypot(eT, nT);
+    /* bearing-to-self is meaningless: within 55 m (~0.03 NM) of the target
+       the RMI pointer hides and the leg waits to slave, so the HSI still
+       behaves like the no-target panel while parked at home */
+    GP.tgtBrg = GP.tgtDist >= 55 ? (Math.atan2(eT, nT) / D2R + 360) % 360 : null;
+    if (!GP.obs && GP.legOrigin == null && GP.tgtDist >= 55) reactivateDirect();
+  }
+  /* CDI: cross-track distance from the course line. Anchor: the target in OBS
+     mode (station radial), the direct-leg activation point in leg mode, the
+     CRS-set position when no target exists. Full scale 0.25 NM (XTK_FS);
+     TO/FROM is station-relative (target when present, anchor otherwise:
+     station ahead = TO). Eased onto the display (~0.6 s) so the bar glides
+     between fixes instead of stepping at the ~1 Hz fix rate. */
+  let devTgt = null, tofrom = 0, xtkOff = false;
+  const o = GP.obs ? GP.tgt : GP.legOrigin || GP.crsOrigin;
+  if (o && c.latitude != null && c.longitude != null) {
+    const R = 6371000, cr = KNOBS.course * D2R;
+    const east = (c.longitude - o.lon) * D2R * Math.cos(o.lat * D2R) * R;
+    const north = (c.latitude - o.lat) * D2R * R;
+    GP.xtk = east * Math.cos(cr) - north * Math.sin(cr);        // + = right of course
+    devTgt = Math.max(-1, Math.min(1, GP.xtk / XTK_FS));
+    xtkOff = Math.abs(GP.xtk) > XTK_FS;                        // off full scale: annunciate, don't just pin
+    const st = GP.tgt || o;                                    // the station for TO/FROM
+    const eS = (st.lon - c.longitude) * D2R * Math.cos(st.lat * D2R) * R;
+    const nS = (st.lat - c.latitude) * D2R * R;
+    tofrom = eS * Math.sin(cr) + nS * Math.cos(cr) > 0 ? 1 : -1;
+  } else GP.xtk = null;
+  const dk = GP.devT == null ? 1 : 1 - Math.exp(-(now - GP.devT) / 600);
+  GP.devT = now;
+  GP.devDisp += ((devTgt == null ? 0 : devTgt) - GP.devDisp) * dk;
+  /* ATTITUDE: phone sensors win when present (gravity vector, ~150 ms ease).
+     GPS approximation is the fallback: pitch = flight-path angle, the
+     altitude regression slope against groundspeed; bank = the coordinated-
+     turn bank for the heading regression slope at this groundspeed
+     (atan(V*w/g)). Targets ease onto the display; they sit level below ~5 kt,
+     when speed is absent, or when the fix is stale. */
+  const wSl = slopeOf(GP.hSamples, 2500), aSl = slopeOf(GP.samples, 4500);
+  const turn = (wSl != null && Math.abs(wSl * 1000) >= 0.25) ? wSl : 0;   // 0.25 deg/s = a 24-minute turn: noise floor, so TC and bank level together
+  let pitchT = 0, bankT = 0, tau = 700;
+  if (sn && sn.att) { pitchT = sn.att.pitch; bankT = sn.att.roll; tau = 150; }
+  else if (GP.lastFixT != null && now - GP.lastFixT < 8000 && ias > 5) {
+    const vfts = ias * 1.68781;                       // kt -> ft/s
+    if (aSl != null) pitchT = Math.max(-20, Math.min(20, Math.atan2(aSl * 1000, vfts) / D2R));
+    if (turn) bankT = Math.max(-30, Math.min(30, Math.atan2(vfts * turn * 1000 * D2R, 32.174) / D2R));
+  }
+  const k = GP.attT == null ? 1 : 1 - Math.exp(-(now - GP.attT) / tau);
+  GP.attT = now;
+  GP.pitchDisp += (pitchT - GP.pitchDisp) * k;
+  GP.bankDisp += (bankT - GP.bankDisp) * k;
+  /* VSI: the regression is the target only when the fix is live and >5 kt
+     (otherwise 0: without the gate the 12 s window holds the last climb
+     after a stop, and a stale fix freezes the needle forever). The cap is a
+     25% grade ceiling x groundspeed (kt x 101.3 ft/min x .25): bounds the
+     reading to what a car can physically do, so altitude noise and
+     re-baseline leftovers cannot slam the needle. */
+  const vcap = (GP.lastFixT != null && now - GP.lastFixT < 8000 && ias > 5) ? ias * 25.32 : 0;
+  const vsiT = vsiFromSamples(vcap);
+  const vk = GP.vsiT == null ? 1 : 1 - Math.exp(-(now - GP.vsiT) / 900);   // own glide: not the attitude ease, which snaps at 150 ms when phone sensors run
+  GP.vsiT = now;
+  GP.vsiDisp += (vsiT - GP.vsiDisp) * vk;
+  const tr = Math.max(-3.5, Math.min(3.5, turn * 1000));
+  const tk = GP.trT == null ? 1 : 1 - Math.exp(-(now - GP.trT) / 400);   // TC: ease like the damped fluid would
+  GP.trT = now;
+  GP.trDisp += (tr - GP.trDisp) * tk;
+  return { ias: GP.iasDisp, pitch: GP.pitchDisp, bank: GP.bankDisp, vsi: GP.vsiDisp, turnRate: GP.trDisp, alt: GP.altDisp, baro: KNOBS.baro, hdg,
+    course: KNOBS.course, bug: KNOBS.bug, dev: GP.devDisp, tofrom, xtk: GP.xtk, xtkOff,
+    tgt: !!GP.tgt, obs: GP.obs, tgtBrg: GP.tgtBrg, tgtDist: GP.tgtDist,
+    flags: { gpsLost: FLAGS.gpsLost,
+      altDead: GP.lastAlt == null,               // altimeter crosshatch: no altitude ever delivered
+      attDead: FLAGS.gpsLost && (sn == null || sn.att == null),   // AI has no source at all
+      headingInvalid: c.heading == null && GP.lastHdg == null && (sn == null || sn.mag == null) } };
+  // NO GS only when no heading ever arrived: parked, the course is stale
+  // rather than absent, so the card keeps showing
+}
+startGPS();   // always on: starts at page load, retries via onErr
+
+/* ================= FIT TO VIEWPORT + LOOP ================= */
+/* FIT TO VIEWPORT: the grid is a fixed 1044 px wide (3x316 bezels + 2x26 gaps
+   + 2x22 padding). Panes narrower than that crop both sides; a large portrait
+   screen (1200x1920) has width and height to spare. So the panel zooms to
+   fill the pane: down on narrow panes, up on large screens, capped at 1.5x (the 2x canvas backing stays sharp to 1.9x) and at what fits
+   vertically without scrolling. zoom instead of transform:scale keeps the
+   layout reflowed. Natural sizes are measured once, before any zoom.
+   Refit from the frame loop as well as resize: some vehicle browsers don't
+   fire resize when the pane changes. */
+const panelEl = document.getElementById('panel');
+const PANEL_W = 3 * 316 + 2 * 26 + 2 * 22;   // keep in sync with .bezel / main.panel CSS
+const PANEL_H = cells[0].offsetHeight * 2 + 20 + 44;   // 2 rows + row gap + padding (scrollHeight is useless here: flex:1 stretches the box)
+const CHROME_H = panelEl.getBoundingClientRect().top + document.querySelector('footer').offsetHeight;
+function fitPanel() {
+  const zw = (document.documentElement.clientWidth - 2) / PANEL_W;
+  const zh = (document.documentElement.clientHeight - 4 - CHROME_H) / PANEL_H;
+  panelEl.style.zoom = Math.max(.3, Math.min(1.5, zw, zh)).toFixed(4);
+}
+addEventListener('resize', fitPanel);
+fitPanel();
+let fitW = 0, fitH = 0;
+function frame() {
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  if (w !== fitW || h !== fitH) { fitW = w; fitH = h; fitPanel(); }
+  render(); requestAnimationFrame(frame);   // live values land between ticks
+}
+/* offline: cache the page for tunnel use (only when hosted — http/https) */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+/* deep-link params: ?bug=&crs=&baro= knob presets; ?tgt=lat,lon sets the HSI
+   waypoint (numeric only; ident lookup deferred — non-numeric is ignored).
+   With a target, ?crs= is superseded at the first fix when the direct leg
+   slaves the pointer. Without ?tgt=, the first fix IS the waypoint: the HSI
+   points home from the moment you drive away. */
+{
+  const q = new URLSearchParams(location.search);
+  if (q.has('bug')) KNOBS.bug = +q.get('bug');
+  if (q.has('crs')) KNOBS.course = +q.get('crs');
+  if (q.has('baro')) KNOBS.baro = +q.get('baro');
+  if (q.has('tgt')) {
+    const m = q.get('tgt').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+    if (m && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) GP.tgt = { lat: +m[1], lon: +m[2] };
+  }
+  syncKnobs();
+}
+render(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

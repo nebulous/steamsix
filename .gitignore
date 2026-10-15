@@ -1,0 +1,6 @@
+/private/
+/.deploy/
+/AGENTS.md
+/deploy.sh
+/.wrangler/
+*.swp
