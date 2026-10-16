@@ -59,6 +59,8 @@
     background: #241a08; border-bottom: 1px solid #4a3610; }
   #gpsmsg.show { display: block; }
   footer { padding: 6px 16px 12px; text-align: center; font: 11px/1.7 ui-monospace, Menlo, Consolas, monospace; color: #6b747d; }
+  #srclink { color: inherit; text-decoration: none; }
+  #srclink:hover, #srclink:active { color: #9aa3ac; text-decoration: underline; }
   #err { color: #ff5b4a; font-family: monospace; padding: 0 16px; white-space: pre-wrap; }
   #sensorpill {
     position: fixed; top: 10px; right: 12px; z-index: 5;
@@ -72,7 +74,7 @@
 <div id="gpsmsg"></div>
 <main class="panel" id="panel"></main>
 <div id="err"></div>
-<footer id="raw">waiting for GPS…</footer>
+<footer id="raw"><span id="rawtxt">waiting for GPS…</span> · <a id="srclink" href="https://github.com/nebulous/steamsix" target="_blank" rel="noopener">src ↗</a></footer>
 <script>
 "use strict";
 window.onerror = (m, s, l) => { document.getElementById('err').textContent += `ERR ${m} @${l}\n`; };
@@ -91,14 +93,14 @@ const FONT = (px, w) => `${w || 600} ${px}px Calibri, "Segoe UI", Arial, sans-se
    denied permission). speed m/s → kt · heading → HDG/track (held when stale,
    flagged only if never seen) · altitude m → ft · the regression-derived
    values (VSI, turn rate, bank, pitch) are least-squares slopes over the
-   rolling buffers with short exponential forgetting (2.5 s heading,
-   4.5 s altitude): the averaging dithers out GPS noise, but motion that
+   rolling buffers with short exponential forgetting (1.4 s heading,
+   2.8 s altitude): the averaging dithers out GPS noise, but motion that
    ended leaves the estimate in ~2-3 time constants instead of ringing
    through the whole 12 s window. VSI is accuracy-weighted, gated
    to 0 below ~5 kt or on a stale fix (a parked car has no vertical speed),
    capped at a 25% grade x groundspeed, and reset when one fix steps past
    the re-baseline gate. Pre-fix the gauges rest at zeros. */
-const GP = { watch: null, retry: null, started: false, fix: false, everFix: false, last: null, ts: null, lastFixT: null, samples: [], hSamples: [], hPrev: null, hCum: 0, attT: null, pitchDisp: 0, bankDisp: 0, vsiDisp: 0, crsOrigin: null, devDisp: 0, devT: null, iasT: null, iasDisp: 0, altT: null, altDisp: 0, trT: null, trDisp: 0, vsiT: null, tgt: null, obs: false, legOrigin: null, tgtBrg: null, tgtDist: null, lastHdg: null, lastAlt: null };
+const GP = { watch: null, retry: null, started: false, fix: false, everFix: false, last: null, ts: null, lastFixT: null, samples: [], hSamples: [], hPrev: null, hCum: 0, attT: null, pitchDisp: 0, bankDisp: 0, vsiDisp: 0, crsOrigin: null, devDisp: 0, devT: null, iasT: null, iasDisp: 0, altT: null, altDisp: 0, trT: null, trDisp: 0, vsiT: null, fixTimes: [], tgt: null, obs: false, legOrigin: null, tgtBrg: null, tgtDist: null, lastHdg: null, lastAlt: null };
 const MS2KT = 1.94384, M2FT = 3.28084;
 const gpsmsg = document.getElementById('gpsmsg');
 function gpsBanner(msg) { gpsmsg.textContent = msg; gpsmsg.classList.toggle('show', !!msg); }
@@ -112,6 +114,7 @@ function onFix(pos) {
   FLAGS.gpsLost = false; GP.last = pos.coords; GP.fix = true; GP.ts = pos.timestamp;
   const now = performance.now();
   GP.lastFixT = now;
+  GP.fixTimes.push(now);                      // footer rate meter: rolling fix frequency
   if (!GP.crsOrigin) anchorCourse();             // first fix anchors the default course line
   /* no ?tgt= deep link: the first fix becomes the waypoint, so the HSI
      always points back to where the session started ("home") */
@@ -694,7 +697,7 @@ const VALS = [
    browser isn't providing (some vehicle browsers may omit speed or heading). */
 let rawCache = '';
 function rawGPS() {
-  const c = GP.last;
+  const c = GP.last, now = performance.now();
   const f = (k, d, u) => {
     const v = c == null ? null : k === 'altacc' ? c.altitudeAccuracy : c[k];
     return v == null ? '–' : (+v).toFixed(d) + (u || '');
@@ -704,9 +707,16 @@ function rawGPS() {
     const a = Math.max(0, (Date.now() - GP.ts) / 1000);
     age = a < 90 ? a.toFixed(0) + ' s' : (a / 60).toFixed(0) + ' min';
   }
+  /* rolling fix rate over the trailing 10 s: (n-1) intervals over the
+     observed span, so the first seconds after a fix are honest, and the
+     count decays to a dash when fixes stop arriving */
+  let hz = '–';
+  const ft = GP.fixTimes;
+  while (ft.length && now - ft[0] > 10000) ft.shift();
+  if (ft.length > 1) hz = ((ft.length - 1) / ((ft[ft.length - 1] - ft[0]) / 1000)).toFixed(1) + ' Hz';
   return ['lat ' + f('latitude', 6), 'lon ' + f('longitude', 6), 'acc ' + f('accuracy', 0, ' m'),
     'alt ' + f('altitude', 1, ' m'), 'altacc ' + f('altacc', 0, ' m'), 'hdg ' + f('heading', 1, '°'),
-    'spd ' + f('speed', 2, ' m/s'), 'fix ' + age + ' ago'].join(' · ');
+    'spd ' + f('speed', 2, ' m/s'), 'fix ' + age + ' ago', 'rate ' + hz].join(' · ');
 }
 function render() {
   const s = state();
@@ -717,7 +727,7 @@ function render() {
     caps[i].querySelector('.flag').textContent = fl;
   });
   const raw = rawGPS();
-  if (raw !== rawCache) { rawCache = raw; document.getElementById('raw').textContent = raw; }
+  if (raw !== rawCache) { rawCache = raw; document.getElementById('rawtxt').textContent = raw; }
   syncKnobs();   // CRS knob index tracks the slaved pointer in leg mode
   return s;
 }
@@ -880,10 +890,10 @@ function slopeOf(s, tw) {                       // least-squares dy/dt, y per ms
 }
 function vsiFromSamples(vcap) {                 // ft/ms -> fpm, clamped to the speed-plausible cap
   if (vcap <= 0) return 0;   // parked/stale: a stationary car has no vertical speed
-  const sl = slopeOf(GP.samples, 4500);         // 4.5 s forget: grades read in ~4 s, not ~12
+  const sl = slopeOf(GP.samples, 2800);         // 2.8 s forget: grades read in ~3 s, not ~6
   if (sl == null) return 0;
   const fpm = sl * 60000;
-  if (Math.abs(fpm) < 70) return 0;             // regression noise floor, under dial resolution
+  if (Math.abs(fpm) < 100) return 0;             // regression noise floor, under dial resolution
   const cap = Math.min(vcap, 2000);             // 2000 = dial full scale
   return Math.max(-cap, Math.min(cap, fpm));
 }
@@ -945,9 +955,9 @@ function gpsState(sn) {
      turn bank for the heading regression slope at this groundspeed
      (atan(V*w/g)). Targets ease onto the display; they sit level below ~5 kt,
      when speed is absent, or when the fix is stale. */
-  const wSl = slopeOf(GP.hSamples, 2500), aSl = slopeOf(GP.samples, 4500);
-  const turn = (wSl != null && Math.abs(wSl * 1000) >= 0.25) ? wSl : 0;   // 0.25 deg/s = a 24-minute turn: noise floor, so TC and bank level together
-  let pitchT = 0, bankT = 0, tau = 700;
+  const wSl = slopeOf(GP.hSamples, 1400), aSl = slopeOf(GP.samples, 2800);
+  const turn = (wSl != null && Math.abs(wSl * 1000) >= 0.5) ? wSl : 0;   // 0.5 deg/s = a 12-minute turn: noise floor, so TC and bank level together
+  let pitchT = 0, bankT = 0, tau = 400;
   if (sn && sn.att) { pitchT = sn.att.pitch; bankT = sn.att.roll; tau = 150; }
   else if (GP.lastFixT != null && now - GP.lastFixT < 8000 && ias > 5) {
     const vfts = ias * 1.68781;                       // kt -> ft/s
@@ -966,11 +976,11 @@ function gpsState(sn) {
      re-baseline leftovers cannot slam the needle. */
   const vcap = (GP.lastFixT != null && now - GP.lastFixT < 8000 && ias > 5) ? ias * 25.32 : 0;
   const vsiT = vsiFromSamples(vcap);
-  const vk = GP.vsiT == null ? 1 : 1 - Math.exp(-(now - GP.vsiT) / 900);   // own glide: not the attitude ease, which snaps at 150 ms when phone sensors run
+  const vk = GP.vsiT == null ? 1 : 1 - Math.exp(-(now - GP.vsiT) / 600);   // own glide: not the attitude ease, which snaps at 150 ms when phone sensors run
   GP.vsiT = now;
   GP.vsiDisp += (vsiT - GP.vsiDisp) * vk;
   const tr = Math.max(-3.5, Math.min(3.5, turn * 1000));
-  const tk = GP.trT == null ? 1 : 1 - Math.exp(-(now - GP.trT) / 400);   // TC: ease like the damped fluid would
+  const tk = GP.trT == null ? 1 : 1 - Math.exp(-(now - GP.trT) / 300);   // TC: ease like the damped fluid would
   GP.trT = now;
   GP.trDisp += (tr - GP.trDisp) * tk;
   return { ias: GP.iasDisp, pitch: GP.pitchDisp, bank: GP.bankDisp, vsi: GP.vsiDisp, turnRate: GP.trDisp, alt: GP.altDisp, baro: KNOBS.baro, hdg,

@@ -1,7 +1,7 @@
 /* Steam Six service worker - cache-first for tunnel/underground use.
    Bump the cache name to ship an updated page to already-visited browsers.
    Prefix changed with the rename; activate purges older caches. */
-const CACHE = 'steamsix-v27';
+const CACHE = 'steamsix-v30';
 const ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', e => {

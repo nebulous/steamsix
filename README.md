@@ -2,26 +2,29 @@
 
 ![Steam Six mid-drive: climbing right turn, HSI leading home](preview.png)
 
-Six Standard Steam gauges for all occasions. Take your instruments with you
-in a browser tab, driven by what sensors you have available.
+Six Steam gauges for all occasions. Take your instruments with you
+in a browser tab!
+
 View your airspeed, attitude, altimeter, turn coordinator, heading, and
 vertical speed. Any moving thing qualifies: cars, boats, tricycles, bicycles,
 unicycles, trains obviously, or a walk back from the mailbox at a brisk 3 kt.
 
-**See it Live:** https://steamsix.pages.dev
+**Try it:** https://steamsix.pages.dev
 
 ## A real problem
 
-Most vehicles have instruments. Accurate instruments. Well lit,
-connected to real sensors, and the manufacturer stands behind them.
-Regrettably, some have no attitude indicator or refuse to display speed in
-knots. Steam Six corrects this with a classic "six-pack" of analog flight
-instruments, packaged into one little self-contained HTML file. Now the
-browser's geolocation feed stands in for the pitot-static system: speed in
-knots, GPS course as heading, altitude in feet, climb rate on the VSI. The
-whole panel is one page and a service worker, about 60 KB. It works offline
-after the first visit and maintains its dignity through tunnels (the service
-worker caches the page, and the GPS feed re-arms after every failure).
+Most vehicles have instruments. Sure, they're accurate. Yes, they're
+designed for the use-case.
+Regrettably, some bikes have no attitude indicator. 
+Riding mowers are unaware of their altitude.
+Cars steadfastly refuse to display their speed in knots.
+
+Steam Six corrects these omissions with a "six-pack" of analog flight instruments.
+
+Now the browser's geolocation service stands in for the pitot-static system: speed in
+knots, GPS course as heading, altitude in feet, climb rate on the VSI.
+The whole panel is one page and a service worker, so it works offline
+and maintains its ~~wild inaccuracy~~ dignity through tunnels and turns.
 
 ## Pilot's Operating Handbook
 
@@ -32,23 +35,6 @@ worker caches the page, and the GPS feed re-arms after every failure).
    NO GS. Once GPS has reported a heading, the dial keeps showing it,
    parked included. At a standstill the GPS course is stale, not absent,
    much like the vehicle or a forgotten sandwich.
-
-### Section 4: Knobs and things they do
-
-Panel knobs, mounted at the gauge corners. They do things:
-
-- **HDG** - heading bug. Drag to rotate, tap the edges to step 5°,
-  double-tap to reset.
-- **CRS** - course select. Turning it anchors a course line at the
-  vehicle's position. Holding it while stationary re-anchors without
-  turning. The deviation bar (CDI) shows cross-track distance from that
-  line (0.25 NM full scale) with a TO/FROM triangle relative to the
-  anchor point.
-- **BARO** - Kollsman knob coupled to the needles like the real
-  instrument: about 10 ft per 0.01 inHg and 1,000 ft per inHg, applied
-  live, clamped to the real scale range 28.10-31.00, default 29.92. Now
-  the dentist has a field elevation, and it is yours to dial in.
-
 3. URL params preset the knobs and set the waypoint
    (see [URL parameters](#url-parameters)). Without `?tgt=` the first GPS fix
    becomes the waypoint, so the HSI always leads you home. With a target the
@@ -65,12 +51,28 @@ Panel knobs, mounted at the gauge corners. They do things:
    supply heading while parked (iOS needs one tap on ENABLE MOTION). Any
    rigid mount works: portrait, landscape, upside down. A phone lying flat
    declines to guess and falls back to the GPS-derived attitude.
-7. The **LVL** knob on the attitude indicator calibrates out mount tilt.
-   Tap it while the vehicle sits level and that attitude becomes
-   straight-and-level. It persists across reloads. Press and hold to clear.
-   Calibration stays manual: crowned roads, hills, and parking slopes bias a
-   long-term gravity mean, and a horizon that drifts silently is worse than
-   a fixed mount offset.
+
+### Knobs and things they do
+
+Panel knobs, mounted at the gauge corners:
+
+- **HDG** - heading bug. Drag to rotate, tap the edges to step 5°,
+  double-tap to reset.
+- **CRS** - course select. Turning it anchors a course line at the
+  vehicle's position. Holding it while stationary re-anchors without
+  turning. The deviation bar (CDI) shows cross-track distance from that
+  line (0.25 NM full scale) with a TO/FROM triangle relative to the
+  anchor point.
+- **BARO** - Kollsman knob coupled to the needles like the real
+  instrument: about 10 ft per 0.01 inHg and 1,000 ft per inHg, applied
+  live, clamped to the real scale range 28.10-31.00, default 29.92. Now
+  the dentist has a field elevation, and it is yours to dial in.
+- **LVL** - calibrates mount tilt out of the attitude indicator. Tap it
+  while the vehicle sits level and that attitude becomes
+  straight-and-level. It persists across reloads. Press and hold to clear.
+  Calibration stays manual: crowned roads, hills, and parking slopes bias a
+  long-term gravity mean, and a horizon that drifts silently is worse than
+  a fixed mount offset.
 
 ## URL parameters
 
@@ -107,32 +109,27 @@ you will finally learn how fast the parking garage ramp descends.
 
 **Can I navigate by it?** No. It would be insane to trust consumer GPS, uncertified code,
 and a driver who is clearly not paying attention. The CDI math is real. The certifying
-authorities were not consulted. Do not fly your boat this way.
+authorities were not consulted. Do not fly your boat or riding mower this way.
 
-**Does it work in an actual airplane?** I mean... maybe? GPS keeps receiving
+**Does it work in an actual airplane?** I mean... maybe? GPS keeps working
 with the phone in airplane mode usually, so from a passenger seat you can run the
-same six gauges as the folks up front at a fraction of the panel weight and
-with many times the inaccuracy. The attitude indicator even agrees with the
+same six gauges as the folks up front at a _fraction_ of the panel weight and
+with _many times_ the inaccuracy. The attitude indicator even agrees with the
 horizon most of the time.
 
 **Why knots?** Why not?! This is an instrument panel, and instruments in panels
-speak knots. Anything else is just a dashboard. Boats at least get this right, but trains
-and trikes consistently muck it up. Your car may never extend its flaps or rotate. Its V-speeds
+speak knots. Anything else is just a dashboard. Boats at least tend to get this right, but trains
+and trikes consistently muck it up. Your car may never extend its flaps or rotate, but its V-speeds
 can still be aspirational.
 
-**Is it expensive?** You should expect to pay ten, twenty, even seventy
-thousand dollars for a panel with these full-color features. Friends, if you act today, it can
-be yours for the low, low price of one (1) GitHub star.
+**Is it expensive?** I know what you're thinking. You probably expect to pay ten, twenty, even seventy
+thousand dollars for a panel with these full-color, space-age features. Friends, if you act today, it can
+be yours for the low, low price of one (1) GitHub star. ⭐️
 
-## Technical notes
+## Field reports
 
-- One draw module per gauge (`drawASI/AI/ALT/TC/HI/VSI`) painting two
-  canvases. Each instrument follows its real counterpart's presentation.
-- Phone orientation sensors, when the browser provides them, take precedence
-  over the GPS-derived attitude. Browsers without sensor events fall back to
-  the GPS-derived ~~lies~~ approximations.
-- `sw.js` caches the page. Deployments bump the cache name (`steamsix-vN`)
-  so returning clients should pick up any new builds.
+Photograph the panel in whatever you pilot and attach it to an issue.
+Riding mowers count. Be the first.
 
 ## License
 
