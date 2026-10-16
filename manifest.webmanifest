@@ -1,0 +1,14 @@
+{
+  "name": "Steam Six",
+  "short_name": "Steam Six",
+  "description": "Six aircraft steam gauges driven by browser GPS.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0c0e",
+  "theme_color": "#0a0c0e",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,6 +1,6 @@
 # Steam Six
 
-![Steam Six mid-drive: climbing right turn, HSI leading home](preview.png)
+![Steam Six mid-drive: climbing right turn, HSI leading home](assets/preview.png)
 
 Six Steam gauges for all occasions. Take your instruments with you
 in a browser tab!
@@ -23,13 +23,13 @@ Steam Six corrects these omissions with a "six-pack" of analog flight instrument
 
 Now the browser's geolocation service stands in for the pitot-static system: speed in
 knots, GPS course as heading, altitude in feet, climb rate on the VSI.
-The whole panel is one page and a service worker, so it works offline
+A service worker caches the page, so it works offline
 and maintains its ~~wild inaccuracy~~ dignity through tunnels and turns.
 
 ## Pilot's Operating Handbook
 
 1. Open it up in a browser and allow Location when prompted. GPS polling starts at
-   page load and re-arms after every failure, so leaving a tunnel or fixing
+   page load and re-arms after any failure, so leaving a tunnel or fixing
    the permission in the address bar recovers without a reload.
 2. Before the first fix the gauges rest at zero and the heading dial flags
    NO GS. Once GPS has reported a heading, the dial keeps showing it,
@@ -123,8 +123,9 @@ and trikes consistently muck it up. Your car may never extend its flaps or rotat
 can still be aspirational.
 
 **Is it expensive?** I know what you're thinking. You probably expect to pay ten, twenty, even seventy
-thousand dollars for a panel with these full-color, space-age features. Friends, if you act today, it can
-be yours for the low, low price of one (1) GitHub star. ⭐️
+thousand dollars for a panel with these full-color, space-age features.
+
+Friends, if you act today, it can be yours for the low, low price of one (1) GitHub star. ⭐️
 
 ## Field reports
 

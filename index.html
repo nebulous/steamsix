@@ -9,16 +9,22 @@
 <meta property="og:description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://steamsix.pages.dev/">
-<meta property="og:image" content="https://steamsix.pages.dev/card.jpg">
+<meta property="og:image" content="https://steamsix.pages.dev/assets/card.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:site_name" content="Steam Six">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Steam Six - the six pack you need">
 <meta name="twitter:description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
-<meta name="twitter:image" content="https://steamsix.pages.dev/card.jpg">
+<meta name="twitter:image" content="https://steamsix.pages.dev/assets/card.jpg">
 <meta name="theme-color" content="#0a0c0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%230e1013' stroke='%23565d66' stroke-width='2'/><path d='M3 16a13 13 0 0 1 26 0z' fill='%234f9bd9'/><path d='M3 16a13 13 0 0 0 26 0z' fill='%237a4a1e'/><rect x='15' y='4' width='2' height='24' fill='%23e8ebef'/></svg>">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -100,7 +106,8 @@ const FONT = (px, w) => `${w || 600} ${px}px Calibri, "Segoe UI", Arial, sans-se
    to 0 below ~5 kt or on a stale fix (a parked car has no vertical speed),
    capped at a 25% grade x groundspeed, and reset when one fix steps past
    the re-baseline gate. Pre-fix the gauges rest at zeros. */
-const GP = { watch: null, retry: null, started: false, fix: false, everFix: false, last: null, ts: null, lastFixT: null, samples: [], hSamples: [], hPrev: null, hCum: 0, attT: null, pitchDisp: 0, bankDisp: 0, vsiDisp: 0, crsOrigin: null, devDisp: 0, devT: null, iasT: null, iasDisp: 0, altT: null, altDisp: 0, trT: null, trDisp: 0, vsiT: null, fixTimes: [], tgt: null, obs: false, legOrigin: null, tgtBrg: null, tgtDist: null, lastHdg: null, lastAlt: null };
+const GP = { watch: null, retry: null, started: false, fix: false, everFix: false, last: null, ts: null, lastFixT: null, fixTimes: [], samples: [], hSamples: [], hPrev: null, hCum: 0, attT: null, pitchDisp: 0, bankDisp: 0, vsiDisp: 0, crsOrigin: null, devDisp: 0, devT: null, iasT: null, iasDisp: 0, altT: null, altDisp: 0, trT: null, trDisp: 0, vsiT: null, tgt: null, obs: false, legOrigin: null, tgtBrg: null, tgtDist: null, lastHdg: null, lastAlt: null };
+let VER = null, rawVerInit = false;
 const MS2KT = 1.94384, M2FT = 3.28084;
 const gpsmsg = document.getElementById('gpsmsg');
 function gpsBanner(msg) { gpsmsg.textContent = msg; gpsmsg.classList.toggle('show', !!msg); }
@@ -698,6 +705,22 @@ const VALS = [
 let rawCache = '';
 function rawGPS() {
   const c = GP.last, now = performance.now();
+  /* version display: derived from the service-worker cache name (steamsix-vN),
+     the same counter deploys bump - one source of truth, no second const.
+     Refreshed every 5 s so a freshly activated update ticks the number up;
+     the number becomes the src link text once known */
+  if (!rawVerInit) { rawVerInit = true;
+    if (window.caches) {
+      const chk = () => caches.keys().then(ks => {
+        const v = ks.filter(k => k.startsWith('steamsix-')).sort().pop();
+        if (v) { VER = v.slice('steamsix-v'.length);
+          const el = document.getElementById('srclink');
+          if (el) el.textContent = 'v' + VER + ' ↗';
+        }
+      }).catch(() => {});
+      chk(); setInterval(chk, 5000);
+    }
+  }
   const f = (k, d, u) => {
     const v = c == null ? null : k === 'altacc' ? c.altitudeAccuracy : c[k];
     return v == null ? '–' : (+v).toFixed(d) + (u || '');
