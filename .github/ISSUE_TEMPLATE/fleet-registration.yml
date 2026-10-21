@@ -1,0 +1,35 @@
+name: Fleet registration
+description: Register a vehicle with the Steam Six fleet
+labels: [fleet]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Any moving thing qualifies. Paste a photo (landscape, ideally mid-flight)
+        directly into the Photo field.
+  - type: input
+    id: reg
+    attributes:
+      label: Tail number
+      description: Your chosen registration, e.g. N6BW. Leave blank and the registrar assigns one.
+      placeholder: N6BW
+  - type: input
+    id: type
+    attributes:
+      label: Vehicle type
+      description: What it is mounted to. Be specific; the registry is official.
+      placeholder: iPad, taped to a Big Wheel
+    validations:
+      required: true
+  - type: textarea
+    id: photo
+    attributes:
+      label: Photo
+      description: Paste the image directly into this field.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Registry notes
+      description: Flight hours, incidents, inspector commentary.

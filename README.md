@@ -28,7 +28,9 @@ and maintains its ~~wild inaccuracy~~ dignity through tunnels and turns.
 
 ## Pilot's Operating Handbook
 
-1. Open it up in a browser and allow Location when prompted. GPS polling starts at
+1. Open it up in a browser and allow Location when prompted. On a phone, save
+   it to the home screen: it installs like an app and launches full-screen.
+   GPS polling starts at
    page load and re-arms after any failure, so leaving a tunnel or fixing
    the permission in the address bar recovers without a reload.
 2. Before the first fix the gauges rest at zero and the heading dial flags
@@ -45,8 +47,9 @@ and maintains its ~~wild inaccuracy~~ dignity through tunnels and turns.
 4. The panel scales to the browser window, from a narrow split view up to a
    large portrait screen, capped at what fits without vertical scrolling.
 5. The footer streams the raw geolocation data: lat, lon, accuracy,
-   altitude, altitude accuracy, heading, speed, fix age. A dash marks any
-   field the browser is not providing. The needles can be audited.
+   altitude, altitude accuracy, heading, speed, fix age, fix rate. A dash
+   marks any field the browser is not providing. The version number at the
+   end is a link to the source. The needles can be audited.
 6. On a phone, tilt and compass sensors drive the attitude indicator and
    supply heading while parked (iOS needs one tap on ENABLE MOTION). Any
    rigid mount works: portrait, landscape, upside down. A phone lying flat
@@ -96,7 +99,7 @@ The old fashioned way, pilgrim. With lies.
 | Airspeed | `coords.speed` m/s -> kt |
 | Heading / CDI | `coords.heading`, last reported value at standstill; phone magnetic heading below ~5 kt; CDI = cross-track distance from the course line anchored where CRS was set |
 | Altitude | `coords.altitude` m -> ft, Kollsman-coupled to the BARO knob (indicated = true + baro offset) |
-| VSI | least-squares slope of altitude over a rolling 12 s window, weighted by reported altitude accuracy (1/sigma^2); an altitude step past a 4-sigma gate re-baselines the window; capped at a 25% grade x groundspeed; eased to zero below ~5 kt or on a stale fix |
+| VSI | exponentially-weighted least-squares slope of altitude, the forgetting time scaling with fix rate; weighted by reported altitude accuracy (1/sigma^2); an altitude step past a 4-sigma gate re-baselines the window; capped at a 25% grade x groundspeed; eased to zero below ~5 kt or on a stale fix |
 | Turn coordinator | heading-delta rate |
 | Attitude | phone device orientation when present (gravity-vector based); otherwise approximated: pitch = flight-path angle, bank = coordinated-turn bank, both from GPS regressions; eases level below ~5 kt, without speed, or on a stale fix |
 
@@ -129,7 +132,13 @@ Friends, if you act today, it can be yours for the low, low price of one (1) Git
 
 ## Field reports
 
-Photograph the panel in whatever you pilot and attach it to an issue.
+| Reg | Type | Notes |
+|---|---|---|
+| N6BW | iPad, taped to a Big Wheel | founder's vehicle; photo pending delivery |
+
+Photograph the panel in whatever you pilot and attach it to an issue —
+[open a
+registration](https://github.com/nebulous/steamsix/issues/new?template=fleet-registration.yml).
 Riding mowers count. Be the first.
 
 ## License
