@@ -1,5 +1,6 @@
 /private/
 /.deploy/
+/.deploy-last
 /AGENTS.md
 /deploy.sh
 /.wrangler/
