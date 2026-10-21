@@ -134,11 +134,10 @@ Friends, if you act today, it can be yours for the low, low price of one (1) Git
 
 | Reg | Type | Notes |
 |---|---|---|
-| [N6BW](assets/fleet/n6bw.jpg) | iPad, taped to control yoke | Big Wheel, Disney's Frozen paint scheme; pictured in its hangar |
+| [N6BW](assets/fleet/n6bw.jpg) | Big Wheel | Disney's Frozen paint scheme. iPad taped to control yoke. pictured in its hangar |
 
-Photograph the panel in whatever you pilot and attach it to an issue —
-[open a
-registration](https://github.com/nebulous/steamsix/issues/new?template=fleet-registration.yml).
+Photograph your Steam Six implementation in whatever you pilot, then
+[file a registration](https://github.com/nebulous/steamsix/issues/new?template=fleet-registration.yml).
 Riding mowers count. Be the first.
 
 ## License
