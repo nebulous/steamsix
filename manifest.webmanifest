@@ -1,7 +1,7 @@
 {
   "name": "Steam Six",
   "short_name": "Steam Six",
-  "description": "Six aircraft steam gauges driven by browser GPS.",
+  "description": "Steam gauges for all occasions: six GPS-driven aircraft instruments in a browser tab.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

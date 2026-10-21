@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Steam Six</title>
-<meta name="description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
+<meta name="description" content="Steam gauges for all occasions. Six aircraft instruments in a browser tab, driven by GPS. Any moving thing qualifies: cars, boats, trains, on foot.">
 <meta property="og:title" content="Steam Six - the six pack you need">
-<meta property="og:description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
+<meta property="og:description" content="Steam gauges for all occasions. Six aircraft instruments in a browser tab, driven by GPS. Any moving thing qualifies.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://steamsix.pages.dev/">
 <meta property="og:image" content="https://steamsix.pages.dev/assets/card.jpg">
@@ -15,7 +15,7 @@
 <meta property="og:site_name" content="Steam Six">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Steam Six - the six pack you need">
-<meta name="twitter:description" content="Six aircraft steam gauges driven by browser GPS: speed in knots, course as heading, altitude in feet, vertical speed, turn rate. Any vehicle, or on foot.">
+<meta name="twitter:description" content="Steam gauges for all occasions. Six aircraft instruments in a browser tab, driven by GPS. Any moving thing qualifies.">
 <meta name="twitter:image" content="https://steamsix.pages.dev/assets/card.jpg">
 <meta name="theme-color" content="#0a0c0e">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -99,8 +99,12 @@ const FONT = (px, w) => `${w || 600} ${px}px Calibri, "Segoe UI", Arial, sans-se
    denied permission). speed m/s → kt · heading → HDG/track (held when stale,
    flagged only if never seen) · altitude m → ft · the regression-derived
    values (VSI, turn rate, bank, pitch) are least-squares slopes over the
-   rolling buffers with short exponential forgetting (1.4 s heading,
-   2.8 s altitude): the averaging dithers out GPS noise, but motion that
+   rolling buffers with exponential forgetting whose time constant scales
+   with the measured fix interval (TW = k*sqrt(interval); noise ~
+   sqrt(interval)/TW, so a fixed k holds the noise floor while response
+   tracks the platform: the car's 10 Hz gets 0.7 s heading / 1.6 s
+   altitude, a 1 Hz phone gets 2.2 s / 5.0 s). The averaging dithers out
+   GPS noise, but motion that
    ended leaves the estimate in ~2-3 time constants instead of ringing
    through the whole 12 s window. VSI is accuracy-weighted, gated
    to 0 below ~5 kt or on a stale fix (a parked car has no vertical speed),
@@ -111,6 +115,9 @@ let VER = null, rawVerInit = false;
 const MS2KT = 1.94384, M2FT = 3.28084;
 const gpsmsg = document.getElementById('gpsmsg');
 function gpsBanner(msg) { gpsmsg.textContent = msg; gpsmsg.classList.toggle('show', !!msg); }
+/* framed embeds: geolocation is the embedder's call (iframe allow attr /
+   Permissions-Policy), never ours - the address-bar advice would be a lie */
+const FRAMED = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
 function startGPS() {
   if (!('geolocation' in navigator)) { gpsBanner('This browser has no location support.'); return; }
   GP.started = true;
@@ -159,6 +166,11 @@ function onErr(e) {
   GP.fix = false;
   FLAGS.gpsLost = GP.everFix && e.code !== 1;   // had a fix, then lost it ⇒ X overlay
   const denied = e.code === 1;
+  if (denied && FRAMED) {
+    gpsmsg.innerHTML = 'Location is blocked inside this frame - the embedding site must allow it. '
+      + '<a href="' + location.href.split('#')[0] + '" target="_blank" rel="noopener">Open Steam Six in its own tab</a>.';
+    gpsmsg.classList.add('show');
+  } else
   gpsBanner(denied
     ? 'Location is blocked for this site. Allow it in the address bar (tap the ⓘ / lock icon → Location → Allow). The page retries automatically.'
     : GP.everFix ? 'GPS signal lost — searching…' : 'No GPS fix yet (underground, tunnel?) — searching…');
@@ -704,7 +716,7 @@ const VALS = [
    browser isn't providing (some vehicle browsers may omit speed or heading). */
 let rawCache = '';
 function rawGPS() {
-  const c = GP.last, now = performance.now();
+  const c = GP.last;
   /* version display: derived from the service-worker cache name (steamsix-vN),
      the same counter deploys bump - one source of truth, no second const.
      Refreshed every 5 s so a freshly activated update ticks the number up;
@@ -730,13 +742,8 @@ function rawGPS() {
     const a = Math.max(0, (Date.now() - GP.ts) / 1000);
     age = a < 90 ? a.toFixed(0) + ' s' : (a / 60).toFixed(0) + ' min';
   }
-  /* rolling fix rate over the trailing 10 s: (n-1) intervals over the
-     observed span, so the first seconds after a fix are honest, and the
-     count decays to a dash when fixes stop arriving */
-  let hz = '–';
-  const ft = GP.fixTimes;
-  while (ft.length && now - ft[0] > 10000) ft.shift();
-  if (ft.length > 1) hz = ((ft.length - 1) / ((ft[ft.length - 1] - ft[0]) / 1000)).toFixed(1) + ' Hz';
+  const fs = fixStats();               // shared with the estimator: one rate, one truth
+  const hz = fs.hz == null ? '–' : fs.hz.toFixed(1) + ' Hz';
   return ['lat ' + f('latitude', 6), 'lon ' + f('longitude', 6), 'acc ' + f('accuracy', 0, ' m'),
     'alt ' + f('altitude', 1, ' m'), 'altacc ' + f('altacc', 0, ' m'), 'hdg ' + f('heading', 1, '°'),
     'spd ' + f('speed', 2, ' m/s'), 'fix ' + age + ' ago', 'rate ' + hz].join(' · ');
@@ -911,12 +918,19 @@ function linFit(s, tw) {                        // weighted least-squares y ~ yx
 function slopeOf(s, tw) {                       // least-squares dy/dt, y per ms
   const f = linFit(s, tw); return f == null ? null : f.b;
 }
-function vsiFromSamples(vcap) {                 // ft/ms -> fpm, clamped to the speed-plausible cap
+function fixStats() {                          // trims the 10 s fix window; hz + mean interval
+  const ft = GP.fixTimes, now = performance.now();
+  while (ft.length && now - ft[0] > 10000) ft.shift();
+  if (ft.length < 2) return { hz: null, d: 1 };   // pre-fix fallback: assume 1 Hz
+  const d = (ft[ft.length - 1] - ft[0]) / 1000 / (ft.length - 1);
+  return { hz: 1 / d, d: Math.min(2, Math.max(0.05, d)) };
+}
+function vsiFromSamples(vcap, tw) {            // ft/ms -> fpm, clamped to the speed-plausible cap
   if (vcap <= 0) return 0;   // parked/stale: a stationary car has no vertical speed
-  const sl = slopeOf(GP.samples, 2800);         // 2.8 s forget: grades read in ~3 s, not ~6
+  const sl = slopeOf(GP.samples, tw);           // caller tunes tw to the fix rate
   if (sl == null) return 0;
   const fpm = sl * 60000;
-  if (Math.abs(fpm) < 100) return 0;             // regression noise floor, under dial resolution
+  if (Math.abs(fpm) < 120) return 0;             // regression noise floor, under dial resolution
   const cap = Math.min(vcap, 2000);             // 2000 = dial full scale
   return Math.max(-cap, Math.min(cap, fpm));
 }
@@ -978,8 +992,14 @@ function gpsState(sn) {
      turn bank for the heading regression slope at this groundspeed
      (atan(V*w/g)). Targets ease onto the display; they sit level below ~5 kt,
      when speed is absent, or when the fix is stale. */
-  const wSl = slopeOf(GP.hSamples, 1400), aSl = slopeOf(GP.samples, 2800);
-  const turn = (wSl != null && Math.abs(wSl * 1000) >= 0.5) ? wSl : 0;   // 0.5 deg/s = a 12-minute turn: noise floor, so TC and bank level together
+  /* adaptive forgetting: k calibrated at the car's 10 Hz (700 ms heading,
+     1600 ms altitude), so TW degrades to the old conservative values on
+     slower platforms instead of wobbling */
+  const fs = fixStats();
+  const twH = Math.max(400, Math.min(3000, 2200 * Math.sqrt(fs.d)));
+  const twA = Math.max(900, Math.min(6000, 5000 * Math.sqrt(fs.d)));
+  const wSl = slopeOf(GP.hSamples, twH), aSl = slopeOf(GP.samples, twA);
+  const turn = (wSl != null && Math.abs(wSl * 1000) >= 0.6) ? wSl : 0;   // 0.6 deg/s = a 10-minute turn: noise floor, so TC and bank level together
   let pitchT = 0, bankT = 0, tau = 400;
   if (sn && sn.att) { pitchT = sn.att.pitch; bankT = sn.att.roll; tau = 150; }
   else if (GP.lastFixT != null && now - GP.lastFixT < 8000 && ias > 5) {
@@ -998,7 +1018,7 @@ function gpsState(sn) {
      reading to what a car can physically do, so altitude noise and
      re-baseline leftovers cannot slam the needle. */
   const vcap = (GP.lastFixT != null && now - GP.lastFixT < 8000 && ias > 5) ? ias * 25.32 : 0;
-  const vsiT = vsiFromSamples(vcap);
+  const vsiT = vsiFromSamples(vcap, twA);
   const vk = GP.vsiT == null ? 1 : 1 - Math.exp(-(now - GP.vsiT) / 600);   // own glide: not the attitude ease, which snaps at 150 ms when phone sensors run
   GP.vsiT = now;
   GP.vsiDisp += (vsiT - GP.vsiDisp) * vk;
