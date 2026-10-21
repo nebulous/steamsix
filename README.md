@@ -134,7 +134,7 @@ Friends, if you act today, it can be yours for the low, low price of one (1) Git
 
 | Reg | Type | Notes |
 |---|---|---|
-| N6BW | iPad, taped to a Big Wheel | founder's vehicle; photo pending delivery |
+| [N6BW](assets/fleet/n6bw.jpg) | iPad, taped to control yoke | Big Wheel, Disney's Frozen paint scheme; pictured in its hangar |
 
 Photograph the panel in whatever you pilot and attach it to an issue —
 [open a
