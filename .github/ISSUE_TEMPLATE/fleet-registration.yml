@@ -12,13 +12,13 @@ body:
     attributes:
       label: Tail number
       description: Your chosen registration, e.g. N6BW. Leave blank and the registrar assigns one.
-      placeholder: N6BW
+      placeholder: NX123
   - type: input
     id: type
     attributes:
       label: Vehicle type
-      description: What it is mounted to. Be specific; the registry is official.
-      placeholder: iPad, taped to a Big Wheel
+      description: What it is mounted to. Be specific. the registry is official.
+      placeholder: Big Wheel / Golf Cart / Automobile / Locomotive / etc
     validations:
       required: true
   - type: textarea
@@ -32,4 +32,4 @@ body:
     id: notes
     attributes:
       label: Registry notes
-      description: Flight hours, incidents, inspector commentary.
+      description: Photo notes, Flight hours, incidents, inspector commentary.
