@@ -17,7 +17,8 @@
 <meta name="twitter:title" content="Steam Six - the six pack you need">
 <meta name="twitter:description" content="Steam gauges for all occasions. Six aircraft instruments in a browser tab, driven by GPS. Any moving thing qualifies.">
 <meta name="twitter:image" content="https://steamsix.pages.dev/assets/card.jpg">
-<meta name="theme-color" content="#0a0c0e">
+<meta name="theme-color" content="#0a0c0e" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#d9dde2" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -26,10 +27,28 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%230e1013' stroke='%23565d66' stroke-width='2'/><path d='M3 16a13 13 0 0 1 26 0z' fill='%234f9bd9'/><path d='M3 16a13 13 0 0 0 26 0z' fill='%237a4a1e'/><rect x='15' y='4' width='2' height='24' fill='%23e8ebef'/></svg>">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <style>
-  :root { color-scheme: dark; }
+  /* page chrome tracks the OS color scheme; the instruments themselves stay
+     dark-faced (canvas art) in both schemes */
+  :root {
+    color-scheme: light dark;
+    --bg: #0a0c0e; --fg: #cfd4da;
+    --cap: #8d97a1; --cap-strong: #dbe0e6; --flag: #ff5b4a;
+    --msg-bg: #241a08; --msg-border: #4a3610; --msg-fg: #ffc25e;
+    --foot: #6b747d; --foot-hi: #9aa3ac;
+    --pill-bg: #171b20; --pill-fg: #dfe4ea; --pill-border: #2a3138;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #d9dde2; --fg: #2f353d;
+      --cap: #5a636d; --cap-strong: #333a42; --flag: #cf2b1e;
+      --msg-bg: #f7edd8; --msg-border: #d8c188; --msg-fg: #8a5f00;
+      --foot: #565f68; --foot-hi: #333a42;
+      --pill-bg: #eceff2; --pill-fg: #2f353d; --pill-border: #b6bdc4;
+    }
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #0a0c0e; color: #cfd4da;
+    margin: 0; background: var(--bg); color: var(--fg);
     font-family: Calibri, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     display: flex; flex-direction: column; min-height: 100vh;
     -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
@@ -51,26 +70,26 @@
   .knob:active { cursor: grabbing; border-color: #8d97a1; }
   .knob i { display: block; width: 3px; height: 10px; margin: 2px auto 0; background: #e8ebef; border-radius: 2px; }
   .knob b { position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-    font: 700 9px/1.4 Calibri, "Segoe UI", Arial, sans-serif; color: #8d97a1; letter-spacing: .08em; }
+    font: 700 9px/1.4 Calibri, "Segoe UI", Arial, sans-serif; color: var(--cap); letter-spacing: .08em; }
   .bezel {
     width: 316px; height: 316px; border-radius: 50%; padding: 8px;
     background: radial-gradient(circle at 32% 26%, #565d66 0%, #2b3037 34%, #14171b 72%, #0c0e11 100%);
     box-shadow: 0 6px 18px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.14), inset 0 -2px 5px rgba(0,0,0,.6);
   }
   canvas { display: block; border-radius: 50%; box-shadow: inset 0 0 14px rgba(0,0,0,.9); }
-  .cap { margin-top: 7px; font-size: 11.5px; line-height: 1.5; letter-spacing: .14em; color: #8d97a1; }
-  .cap b { color: #dbe0e6; font-weight: 600; }
-  .cap .flag { color: #ff5b4a; font-weight: 700; letter-spacing: .1em; margin-left: 8px; }
-  #gpsmsg { display: none; padding: 8px 16px; font-size: 13px; color: #ffc25e;
-    background: #241a08; border-bottom: 1px solid #4a3610; }
+  .cap { margin-top: 7px; font-size: 11.5px; line-height: 1.5; letter-spacing: .14em; color: var(--cap); }
+  .cap b { color: var(--cap-strong); font-weight: 600; }
+  .cap .flag { color: var(--flag); font-weight: 700; letter-spacing: .1em; margin-left: 8px; }
+  #gpsmsg { display: none; padding: 8px 16px; font-size: 13px; color: var(--msg-fg);
+    background: var(--msg-bg); border-bottom: 1px solid var(--msg-border); }
   #gpsmsg.show { display: block; }
-  footer { padding: 6px 16px 12px; text-align: center; font: 11px/1.7 ui-monospace, Menlo, Consolas, monospace; color: #6b747d; }
+  footer { padding: 6px 16px 12px; text-align: center; font: 11px/1.7 ui-monospace, Menlo, Consolas, monospace; color: var(--foot); }
   #srclink { color: inherit; text-decoration: none; }
-  #srclink:hover, #srclink:active { color: #9aa3ac; text-decoration: underline; }
-  #err { color: #ff5b4a; font-family: monospace; padding: 0 16px; white-space: pre-wrap; }
+  #srclink:hover, #srclink:active { color: var(--foot-hi); text-decoration: underline; }
+  #err { color: var(--flag); font-family: monospace; padding: 0 16px; white-space: pre-wrap; }
   #sensorpill {
     position: fixed; top: 10px; right: 12px; z-index: 5;
-    background: #171b20; color: #dfe4ea; border: 1px solid #2a3138; border-radius: 6px;
+    background: var(--pill-bg); color: var(--pill-fg); border: 1px solid var(--pill-border); border-radius: 6px;
     padding: 8px 14px; font-size: 13px; letter-spacing: .06em; cursor: pointer;
     -webkit-touch-callout: none; user-select: none;
   }
