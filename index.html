@@ -949,7 +949,7 @@ function vsiFromSamples(vcap, tw) {            // ft/ms -> fpm, clamped to the s
   const sl = slopeOf(GP.samples, tw);           // caller tunes tw to the fix rate
   if (sl == null) return 0;
   const fpm = sl * 60000;
-  if (Math.abs(fpm) < 120) return 0;             // regression noise floor, under dial resolution
+  if (Math.abs(fpm) < Math.min(120, vcap * .1)) return 0;   // noise floor scales with the cap: 10% of a 25% grade = 2.5% grade, 120 max
   const cap = Math.min(vcap, 2000);             // 2000 = dial full scale
   return Math.max(-cap, Math.min(cap, fpm));
 }
