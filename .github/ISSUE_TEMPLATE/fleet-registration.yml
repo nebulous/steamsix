@@ -1,5 +1,6 @@
 name: Fleet registration
 description: Register a vehicle with the Steam Six fleet
+title: Fleet registration
 labels: [fleet]
 body:
   - type: markdown

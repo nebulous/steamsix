@@ -105,27 +105,37 @@ The old fashioned way, pilgrim. With lies.
 
 ## Objections, anticipated
 
-**Doesn't my car already have instruments?** It does, and they work. What it
+**Doesn't my car already have instruments?**
+
+ It does, and they work. What it
 lacks is a turn coordinator, a Kollsman knob, or representations of your
 cross-track error. Steam Six supplies all three, plus a VSI, which is how
 you will finally learn how fast the parking garage ramp descends.
 
-**Can I navigate by it?** No. It would be insane to trust consumer GPS, uncertified code,
+**Can I navigate by it?**
+
+ No. It would be insane to trust consumer GPS, uncertified code,
 and a driver who is clearly not paying attention. The CDI math is real. The certifying
 authorities were not consulted. Do not fly your boat or riding mower this way.
 
-**Does it work in an actual airplane?** I mean... maybe? GPS keeps working
+**Does it work in an actual airplane?** 
+
+I mean... maybe? GPS keeps working
 with the phone in airplane mode usually, so from a passenger seat you can run the
 same six gauges as the folks up front at a _fraction_ of the panel weight and
 with _many times_ the inaccuracy. The attitude indicator even agrees with the
 horizon most of the time.
 
-**Why knots?** Why not?! This is an instrument panel, and instruments in panels
+**Why knots?**
+
+Why not?! This is an instrument panel, and instruments in panels
 speak knots. Anything else is just a dashboard. Boats at least tend to get this right, but trains
 and trikes consistently muck it up. Your car may never extend its flaps or rotate, but its V-speeds
 can still be aspirational.
 
-**Is it expensive?** I know what you're thinking. You probably expect to pay ten, twenty, even seventy
+**Is it expensive?**
+
+I know what you're thinking. You probably expect to pay ten, twenty, even seventy
 thousand dollars for a panel with these full-color, space-age features.
 
 Friends, if you act today, it can be yours for the low, low price of one (1) GitHub star. ⭐️
@@ -135,6 +145,7 @@ Friends, if you act today, it can be yours for the low, low price of one (1) Git
 | Reg | Type | Notes |
 |---|---|---|
 | [N6BW](assets/fleet/n6bw.jpg) | Big Wheel | Disney's Frozen paint scheme. iPad taped to control yoke. pictured in its hangar |
+| [NP100D](assets/fleet/np100d.jpg) | Tesla P100D | Self-driving, leaving pilot free to monitor instrumentation |
 
 Photograph your Steam Six implementation in whatever you pilot, then
 [file a registration](https://github.com/nebulous/steamsix/issues/new?template=fleet-registration.yml).
